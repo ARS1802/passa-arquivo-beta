@@ -1,4 +1,5 @@
 import { downloadFile } from "./download.js";
+import { discoverApis as scanNetwork, getCurrentIp } from "./discovery.js";
 import { listFiles } from "./list.js";
 import { uploadFile } from "./upload.js";
 
@@ -9,6 +10,7 @@ class Api {
   constructor() {
     this.apiUrl = this.readStoredApiUrls();
     this.selectedApiUrl = this.apiUrl[0];
+    this.localIp = "";
   }
 
   readStoredApiUrls() {
@@ -36,6 +38,19 @@ class Api {
 
   getSelectedApiUrl() {
     return this.selectedApiUrl;
+  }
+
+  getLocalIp() {
+    return this.localIp;
+  }
+
+  setLocalIp(value) {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error("Informe um endereço IP válido.");
+    }
+
+    this.localIp = value.trim();
+    return this.localIp;
   }
 
   async isHealthy(apiUrl) {
@@ -81,6 +96,39 @@ class Api {
 
     this.selectedApiUrl = apiUrl;
     return apiUrl;
+  }
+
+  removeApiUrl(apiUrl) {
+    if (!this.apiUrl.includes(apiUrl)) {
+      throw new Error("A URL selecionada não está configurada.");
+    }
+
+    this.apiUrl = this.apiUrl.filter((url) => url !== apiUrl);
+    this.selectedApiUrl = this.apiUrl[0];
+
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
+    }
+
+    return this.selectedApiUrl;
+  }
+
+  async discoverApis(localIp = this.localIp) {
+    const resolvedIp = localIp || getCurrentIp() || "192.168.0.1";
+    const discoveredUrls = await scanNetwork(resolvedIp);
+    this.localIp = resolvedIp;
+    const urls = [...new Set([...this.apiUrl, ...discoveredUrls])];
+
+    this.apiUrl = urls;
+    if (!this.apiUrl.includes(this.selectedApiUrl)) {
+      this.selectedApiUrl = this.apiUrl[0];
+    }
+
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
+    }
+
+    return discoveredUrls;
   }
 
   listFiles(...parameters) {

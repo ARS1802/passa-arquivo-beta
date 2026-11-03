@@ -1,5 +1,3 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
 function base64ToBlob(data, mimeType) {
   const binary = atob(data);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
@@ -7,9 +5,9 @@ function base64ToBlob(data, mimeType) {
   return new Blob([bytes], { type: mimeType });
 }
 
-export async function downloadFile(filename) {
+export async function downloadFile(apiUrl, filename) {
   const response = await fetch(
-    `${API_URL}/files/download/${encodeURIComponent(filename)}`,
+    `${apiUrl}/files/download/${encodeURIComponent(filename)}`,
   );
 
   if (!response.ok) {
@@ -28,6 +26,7 @@ export async function downloadFile(filename) {
   const file = await response.json();
 
   if (
+    !file ||
     typeof file.filename !== "string" ||
     typeof file.data !== "string" ||
     typeof file.mimeType !== "string"

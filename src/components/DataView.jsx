@@ -21,8 +21,8 @@ function DataView({ data, loading, error }) {
 
   return (
     <ListGroup>
-      {data.map((filename) => (
-        <ListGroup.Item key={filename}>{filename}</ListGroup.Item>
+      {data.map((file) => (
+        <ListGroup.Item key={file.filename}>{file.filename}</ListGroup.Item>
       ))}
     </ListGroup>
   );

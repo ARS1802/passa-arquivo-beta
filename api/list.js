@@ -1,7 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
-export async function listFiles() {
-  const response = await fetch(`${API_URL}/files`);
+export async function listFiles(apiUrl) {
+  const response = await fetch(`${apiUrl}/files`);
 
   if (!response.ok) {
     let message = `Não foi possível listar os arquivos (${response.status}).`;
@@ -17,12 +15,20 @@ export async function listFiles() {
   }
 
   const result = await response.json();
-  console.log(result);
 
   if (
     !result ||
     !Array.isArray(result.files) ||
-    !result.files.every((filename) => typeof filename === "string")
+    !result.files.every(
+      (file) =>
+        file &&
+        typeof file === "object" &&
+        typeof file.filename === "string" &&
+        typeof file.mimeType === "string" &&
+        Number.isInteger(file.size) &&
+        file.size >= 0 &&
+        typeof file.lastModified === "string",
+    )
   ) {
     throw new Error(
       "A resposta da API não contém uma lista de arquivos válida.",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Card, Container } from "react-bootstrap";
-import { listFiles } from "../../api/list.js";
+import api from "../../api/api.js";
 import DataView from "../components/DataView.jsx";
 
 function FileListPage() {
@@ -13,7 +13,7 @@ function FileListPage() {
     setError("");
 
     try {
-      setFiles(await listFiles());
+      setFiles(await api.listFiles());
     } catch (requestError) {
       setError(requestError.message);
     } finally {

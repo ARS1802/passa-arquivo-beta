@@ -35,7 +35,7 @@ app.use((_request, response, next) => {
   return next();
 });
 app.get("/", (_request, response, next) => {
-  return response.status(200);
+  return response.sendStatus(200);
 });
 app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));

@@ -1,7 +1,7 @@
-import FileListTest from "./components/FileListTest.jsx";
+import FileListPage from "./pages/FileListPage.jsx";
 
 function App() {
-  return <FileListTest />;
+  return <FileListPage />;
 }
 
 export default App;

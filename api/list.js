@@ -17,13 +17,16 @@ export async function listFiles() {
   }
 
   const result = await response.json();
+  console.log(result);
 
   if (
     !result ||
     !Array.isArray(result.files) ||
     !result.files.every((filename) => typeof filename === "string")
   ) {
-    throw new Error("A resposta da API não contém uma lista de arquivos válida.");
+    throw new Error(
+      "A resposta da API não contém uma lista de arquivos válida.",
+    );
   }
 
   return result.files;

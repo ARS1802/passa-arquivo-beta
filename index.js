@@ -8,6 +8,7 @@ import express from "express";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import downloadRoute from "./routes/download.js";
+import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
 import errorHandler from "./utils/error-handler.js";
 
@@ -16,8 +17,20 @@ const port = process.env.PORT || 3000;
 const uploadDirectory = path.resolve(process.env.UPLOAD_DIR || "uploads");
 
 app.use(express.json({ limit: "134mb" }));
+app.use((_request, response, next) => {
+  response.setHeader("Access-Control-Allow-Origin", "*");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (_request.method === "OPTIONS") {
+    return response.sendStatus(204);
+  }
+
+  return next();
+});
 app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));
+app.use("/files", listRoute(uploadDirectory));
 
 app.use(errorHandler);
 

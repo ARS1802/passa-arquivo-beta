@@ -5,13 +5,10 @@ const DEFAULT_MIME_TYPE = "application/octet-stream";
 const base64Pattern =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const mimeTypePattern = /^[\w!#$&^.-]+\/[\w!#$&^.+-]+$/;
+const filenamePattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 export default class File {
   constructor(filename, data, mimeType = DEFAULT_MIME_TYPE) {
-    if (!File.isValidFilename(filename)) {
-      throw new TypeError("Nome de arquivo inválido.");
-    }
-
     if (!Buffer.isBuffer(data)) {
       throw new TypeError("O conteúdo do arquivo deve ser um Buffer.");
     }
@@ -26,8 +23,6 @@ export default class File {
   }
 
   static isValidFilename(filename) {
-    const filenamePattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
-
     return (
       typeof filename === "string" &&
       filename.length > 0 &&

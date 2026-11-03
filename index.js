@@ -11,6 +11,7 @@ import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
 import errorHandler from "./utils/error-handler.js";
+import getLocalIp from "./utils/ip.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -37,7 +38,7 @@ app.use(errorHandler);
 await mkdir(uploadDirectory, { recursive: true });
 
 app.listen(port, () => {
-  console.log(`Servidor ouvindo na porta ${port}`);
+  console.log(`>>>API INICIADA<<<\nhttp://${getLocalIp()}:${port}`);
 });
 
 export default app;

@@ -1,5 +1,5 @@
 import { downloadFile } from "./download.js";
-import { discoverApis as scanNetwork, getCurrentIp } from "./discovery.js";
+import { discoverApis as scanNetwork } from "./discovery.js";
 import { listFiles } from "./list.js";
 import { uploadFile } from "./upload.js";
 
@@ -10,7 +10,6 @@ class Api {
   constructor() {
     this.apiUrl = this.readStoredApiUrls();
     this.selectedApiUrl = this.apiUrl[0];
-    this.localIp = "";
   }
 
   readStoredApiUrls() {
@@ -38,19 +37,6 @@ class Api {
 
   getSelectedApiUrl() {
     return this.selectedApiUrl;
-  }
-
-  getLocalIp() {
-    return this.localIp;
-  }
-
-  setLocalIp(value) {
-    if (typeof value !== "string" || !value.trim()) {
-      throw new Error("Informe um endereço IP válido.");
-    }
-
-    this.localIp = value.trim();
-    return this.localIp;
   }
 
   async isHealthy(apiUrl) {
@@ -113,22 +99,37 @@ class Api {
     return this.selectedApiUrl;
   }
 
-  async discoverApis(localIp = this.localIp) {
-    const resolvedIp = localIp || getCurrentIp() || "192.168.0.1";
-    const discoveredUrls = await scanNetwork(resolvedIp);
-    this.localIp = resolvedIp;
-    const urls = [...new Set([...this.apiUrl, ...discoveredUrls])];
-
-    this.apiUrl = urls;
-    if (!this.apiUrl.includes(this.selectedApiUrl)) {
-      this.selectedApiUrl = this.apiUrl[0];
-    }
-
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
-    }
-
-    return discoveredUrls;
+  /**
+   * Adiciona cada API encontrada à lista e ao peers.csv durante a busca.
+   * @param {string} [cidr] - Faixa IPv4 em notação CIDR.
+   * @param {(url: string) => void} [onFound] - Notifica a interface após atualizar a lista.
+   * @returns {Promise<string[]>} URLs encontradas nesta busca.
+   * @throws {Error} Se não for possível persistir uma descoberta, interrompe a busca.
+   */
+  async discoverApis(cidr, onFound) {
+    return scanNetwork(cidr, {
+      onFound: async (apiUrl) => {
+        if (!this.apiUrl.includes(apiUrl)) this.apiUrl.push(apiUrl);
+        if (!this.apiUrl.includes(this.selectedApiUrl)) {
+          this.selectedApiUrl = this.apiUrl[0];
+        }
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
+        }
+        onFound?.(apiUrl);
+        const response = await fetch(
+          `/api/peers.csv?url=${encodeURIComponent(apiUrl)}`,
+          {
+            method: "POST",
+          },
+        );
+        if (response.status !== 204) {
+          throw new Error(
+            "API encontrada, mas não foi possível salvar em peers.csv.",
+          );
+        }
+      },
+    });
   }
 
   listFiles(...parameters) {

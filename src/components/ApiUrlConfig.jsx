@@ -64,12 +64,18 @@ function ApiUrlConfig() {
     }
   }
 
+  /** Atualiza as URLs exibidas a cada descoberta e mostra o resultado da busca. */
   async function handleDiscovery() {
     setFeedback("");
     setDiscovering(true);
 
     try {
-      const discoveredUrls = await api.discoverApis();
+      let foundCount = 0;
+      const discoveredUrls = await api.discoverApis(undefined, () => {
+        setSelectedApiUrl(api.getSelectedApiUrl());
+        setFeedbackVariant("success");
+        setFeedback(`${++foundCount} URL(s) encontrada(s). Busca em andamento...`);
+      });
       setSelectedApiUrl(api.getSelectedApiUrl());
       setFeedbackVariant("success");
       setFeedback(

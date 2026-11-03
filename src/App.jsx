@@ -1,5 +1,7 @@
+import FileListTest from "./components/FileListTest.jsx";
+
 function App() {
-  return <></>;
+  return <FileListTest />;
 }
 
 export default App;

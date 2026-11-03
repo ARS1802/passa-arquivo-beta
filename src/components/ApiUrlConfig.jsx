@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Alert, Button, Form, InputGroup } from "react-bootstrap";
-import { useApiUrl } from "../context/useApiUrl.js";
+import api from "../../api/api.js";
 
 function ApiUrlConfig() {
-  const { apiUrl, updateApiUrl } = useApiUrl();
-  const [value, setValue] = useState(apiUrl);
+  const [value, setValue] = useState(() => api.getApiUrl());
   const [feedback, setFeedback] = useState("");
 
   function handleSubmit(event) {
@@ -12,8 +11,7 @@ function ApiUrlConfig() {
     setFeedback("");
 
     try {
-      updateApiUrl(value);
-      setValue(value.trim().replace(/\/+$/, ""));
+      setValue(api.setApiUrl(value));
       setFeedback("URL da API salva.");
     } catch (error) {
       setFeedback(error.message);

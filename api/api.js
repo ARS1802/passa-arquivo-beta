@@ -1,4 +1,3 @@
-import { createContext } from "react";
 import { downloadFile } from "./download.js";
 import { listFiles } from "./list.js";
 import { uploadFile } from "./upload.js";
@@ -8,7 +7,6 @@ const DEFAULT_API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 class Api {
   constructor() {
-    this.context = createContext(null);
     this.apiUrl = this.readStoredApiUrl();
   }
 

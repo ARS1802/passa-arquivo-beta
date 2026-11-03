@@ -7,6 +7,7 @@
 import express from "express";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
@@ -16,6 +17,10 @@ import getLocalIp from "./utils/ip.js";
 const app = express();
 const port = process.env.PORT || 3000;
 const uploadDirectory = path.resolve(process.env.UPLOAD_DIR || "uploads");
+const documentationPage = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "pages/index.html",
+);
 
 app.use(express.json({ limit: "134mb" }));
 app.use((_request, response, next) => {
@@ -28,6 +33,13 @@ app.use((_request, response, next) => {
   }
 
   return next();
+});
+app.get("/", (_request, response, next) => {
+  return response.sendFile(documentationPage, (error) => {
+    if (error) {
+      return next(error);
+    }
+  });
 });
 app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Passa Arquivo - API</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        background: #f4f6f8;
+        color: #1f2933;
+      }
+
+      main {
+        width: min(900px, calc(100% - 2rem));
+        margin: 2rem auto;
+      }
+
+      section {
+        margin: 1.5rem 0;
+        padding: 1.25rem;
+        background: #fff;
+        border: 1px solid #d9e2ec;
+        border-radius: 8px;
+      }
+
+      h1,
+      h2 {
+        color: #102a43;
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, monospace;
+      }
+
+      code {
+        padding: 0.1rem 0.3rem;
+        background: #e8eef5;
+        border-radius: 4px;
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 1rem;
+        background: #102a43;
+        color: #f0f4f8;
+        border-radius: 6px;
+      }
+
+      dt {
+        margin-top: 0.75rem;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Passa Arquivo API</h1>
+        <p>API HTTP para compartilhar arquivos usando JSON e conteúdo em Base64.</p>
+        <p>Base URL: <code>http://localhost:3000</code></p>
+      </header>
+
+      <section>
+        <h2>Upload</h2>
+        <p><strong>POST /files/upload</strong></p>
+        <p>Envie um corpo JSON com o nome, o tipo MIME e o conteúdo do arquivo:</p>
+        <pre>{
+  "filename": "documento.pdf",
+  "mimeType": "application/pdf",
+  "data": "&lt;conteudo-em-base64&gt;"
+}</pre>
+        <p>Resposta de sucesso (<code>201 Created</code>):</p>
+        <pre>{
+  "filename": "documento.pdf",
+  "mimeType": "application/pdf",
+  "size": 12345,
+  "downloadUrl": "/files/download/documento.pdf"
+}</pre>
+        <p>O tamanho máximo é 100 MiB. Arquivos existentes não são sobrescritos.</p>
+        <p>Possíveis erros: <code>400</code> (dados inválidos), <code>409</code> (arquivo existente) e <code>413</code> (arquivo grande).</p>
+      </section>
+
+      <section>
+        <h2>Download</h2>
+        <p><strong>GET /files/download/:filename</strong></p>
+        <p>Substitua <code>:filename</code> pelo nome do arquivo:</p>
+        <pre>GET /files/download/documento.pdf</pre>
+        <p>Resposta de sucesso (<code>200 OK</code>):</p>
+        <pre>{
+  "filename": "documento.pdf",
+  "mimeType": "application/octet-stream",
+  "data": "&lt;conteudo-em-base64&gt;",
+  "size": 12345
+}</pre>
+        <p>Possíveis erros: <code>400</code> (nome inválido) e <code>404</code> (arquivo não encontrado).</p>
+      </section>
+
+      <section>
+        <h2>Listagem</h2>
+        <p><strong>GET /files</strong></p>
+        <p>Retorna os arquivos disponíveis:</p>
+        <pre>{
+  "files": [
+    {
+      "filename": "documento.pdf",
+      "mimeType": "application/octet-stream",
+      "size": 12345,
+      "lastModified": "2026-11-03T10:00:00.000Z"
+    }
+  ]
+}</pre>
+      </section>
+
+      <section>
+        <h2>Regras gerais</h2>
+        <dl>
+          <dt>Nome do arquivo</dt>
+          <dd>Deve começar com uma letra ou número e conter apenas letras, números, ponto, hífen ou sublinhado.</dd>
+          <dt>Conteúdo</dt>
+          <dd>O campo <code>data</code> deve ser uma string Base64 válida.</dd>
+          <dt>Content-Type</dt>
+          <dd>Requisições de upload devem usar <code>application/json</code>.</dd>
+        </dl>
+      </section>
+    </main>
+  </body>
+</html>

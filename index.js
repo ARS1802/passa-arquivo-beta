@@ -1,3 +1,9 @@
+/*
+ * Rotas da API:
+ * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
+ * GET /files/download/:filename - retorna o arquivo em Base64.
+ * GET /files - lista os arquivos compartilhados.
+ */
 import express from "express";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -9,7 +15,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const uploadDirectory = path.resolve(process.env.UPLOAD_DIR || "uploads");
 
-app.use(express.json());
+app.use(express.json({ limit: "134mb" }));
 app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));
 

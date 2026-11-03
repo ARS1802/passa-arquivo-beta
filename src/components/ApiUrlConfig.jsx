@@ -74,7 +74,9 @@ function ApiUrlConfig() {
       const discoveredUrls = await api.discoverApis(undefined, () => {
         setSelectedApiUrl(api.getSelectedApiUrl());
         setFeedbackVariant("success");
-        setFeedback(`${++foundCount} URL(s) encontrada(s). Busca em andamento...`);
+        setFeedback(
+          `${++foundCount} URL(s) encontrada(s). Busca em andamento...`,
+        );
       });
       setSelectedApiUrl(api.getSelectedApiUrl());
       setFeedbackVariant("success");
@@ -103,7 +105,7 @@ function ApiUrlConfig() {
           type="url"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="https://api.exemplo.com"
+          placeholder="http://api.exemplo.com:3000"
           required
         />
         <Button type="submit">Salvar</Button>

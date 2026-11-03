@@ -1,9 +1,24 @@
 const DEFAULT_PORT = 3000;
-const DEFAULT_CIDR = "192.168.0.0/24";
 const DEFAULT_CONCURRENCY = 500;
 const DEFAULT_TIMEOUT = 1500;
 const DEFAULT_PATH = "/";
 const SKIP_RESERVED = true;
+const LOCAL_DETECTION_TIMEOUT = 1000;
+
+// Sub-redes comuns de roteadores domésticos e corporativos. Usadas apenas
+// quando o navegador não revela em qual sub-rede o dispositivo está.
+const COMMON_LOCAL_CIDRS = [
+  "192.168.0.0/24",
+  "192.168.1.0/24",
+  "192.168.2.0/24",
+  "192.168.15.0/24",
+  "192.168.18.0/24",
+  "192.168.100.0/24",
+  "10.0.0.0/24",
+  "10.0.1.0/24",
+  "10.1.1.0/24",
+  "172.16.0.0/24",
+];
 
 export function isValidIpv4(ip) {
   if (typeof ip !== "string") return false;
@@ -60,16 +75,103 @@ const RESERVED_RANGES = [
   "240.0.0.0/4",
 ].map(parseCidr);
 
+const PRIVATE_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"].map(
+  parseCidr,
+);
+
 function isReserved(number) {
   return RESERVED_RANGES.some(
     ({ start, end }) => number >= start && number <= end,
   );
 }
 
-function* generateIps(range, skipReserved) {
-  for (let number = range.start; number <= range.end; number += 1) {
-    if (skipReserved && isReserved(number)) continue;
-    yield numberToIp(number);
+function isPrivateIpv4(ip) {
+  if (!isValidIpv4(ip)) return false;
+
+  const number = ipToNumber(ip);
+  return PRIVATE_RANGES.some(
+    ({ start, end }) => number >= start && number <= end,
+  );
+}
+
+/**
+ * Tenta descobrir a(s) sub-rede(s) /24 do dispositivo usando WebRTC.
+ * Navegadores modernos podem ocultar o IP local (mDNS); nesse caso
+ * retorna uma lista vazia.
+ *
+ * @param {number} [timeout=1000]
+ * @returns {Promise<string[]>} Ex.: ["192.168.1.0/24"]
+ */
+export function detectLocalCidrs(timeout = LOCAL_DETECTION_TIMEOUT) {
+  if (typeof RTCPeerConnection === "undefined") return Promise.resolve([]);
+
+  return new Promise((resolve) => {
+    const cidrs = new Set();
+    let connection;
+    let timer;
+
+    const finish = () => {
+      clearTimeout(timer);
+      connection?.close();
+      resolve([...cidrs]);
+    };
+
+    try {
+      connection = new RTCPeerConnection({ iceServers: [] });
+      timer = setTimeout(finish, timeout);
+
+      connection.createDataChannel("");
+      connection.onicecandidate = ({ candidate }) => {
+        if (!candidate) return finish();
+
+        // "candidate:<id> <comp> <proto> <prio> <endereço> <porta> typ ..."
+        const address = candidate.candidate.split(" ")[4];
+        if (isPrivateIpv4(address)) {
+          cidrs.add(`${address.split(".").slice(0, 3).join(".")}.0/24`);
+        }
+      };
+
+      connection
+        .createOffer()
+        .then((offer) => connection.setLocalDescription(offer))
+        .catch(finish);
+    } catch {
+      finish();
+    }
+  });
+}
+
+/**
+ * Faixas a varrer para cobrir a rede local: a sub-rede detectada ou,
+ * se não for possível detectá-la, as sub-redes mais comuns.
+ *
+ * @returns {Promise<string[]>}
+ */
+export async function getLocalNetworkCidrs() {
+  try {
+    const response = await fetch("/local-network.json", {
+      cache: "no-store",
+    });
+    if (response.ok) {
+      const { cidrs } = await response.json();
+      if (Array.isArray(cidrs) && cidrs.length > 0) return cidrs;
+    }
+  } catch {
+    // Usa a detecção do navegador quando a configuração runtime não estiver disponível.
+  }
+
+  const detected = await detectLocalCidrs();
+  return detected.length > 0 ? detected : COMMON_LOCAL_CIDRS;
+}
+
+function* generateIps(ranges) {
+  for (const range of ranges) {
+    const skipReserved = SKIP_RESERVED && !isReserved(range.start);
+
+    for (let number = range.start; number <= range.end; number += 1) {
+      if (skipReserved && isReserved(number)) continue;
+      yield numberToIp(number);
+    }
   }
 }
 
@@ -87,18 +189,21 @@ async function isApiAvailable(apiUrl, timeout, path) {
 }
 
 /**
- * Procura APIs disponíveis em uma faixa IPv4.
+ * Procura APIs que respondem 200 a GET em `path` (padrão "/") nas faixas
+ * IPv4 informadas. Sem faixa, varre a rede local.
  *
- * @param {string} [cidr=192.168.0.0/24] Faixa IPv4 em notação CIDR.
+ * @param {string | string[]} [cidr] Faixa(s) IPv4 em notação CIDR. Se
+ *   omitido ou vazio, usa a rede local (detectada ou sub-redes comuns).
  * @param {object} [options]
  * @param {number} [options.port=3000]
  * @param {number} [options.concurrency=500]
  * @param {number} [options.timeout=1500]
  * @param {string} [options.path="/"] Caminho usado para verificar a API.
  * @param {(url: string) => void | Promise<void>} [options.onFound]
+ *   Chamado uma vez por API encontrada. Se lançar erro, a busca é interrompida.
  * @returns {Promise<string[]>}
  */
-export async function discoverApis(cidr = DEFAULT_CIDR, options = {}) {
+export async function discoverApis(cidr, options = {}) {
   const {
     port = DEFAULT_PORT,
     concurrency = DEFAULT_CONCURRENCY,
@@ -120,32 +225,46 @@ export async function discoverApis(cidr = DEFAULT_CIDR, options = {}) {
     throw new Error("Informe um caminho válido.");
   }
 
-  const range = parseCidr(cidr);
-  const skipReserved = SKIP_RESERVED && !isReserved(range.start);
-  const iterator = generateIps(range, skipReserved);
-  const discoveredApis = [];
+  const requested = [cidr]
+    .flat()
+    .filter((item) => typeof item === "string" && item.trim());
+  const cidrs =
+    requested.length > 0 ? requested : await getLocalNetworkCidrs();
+
+  const ranges = cidrs.map((item) => parseCidr(item.trim()));
+  const totalAddresses = ranges.reduce(
+    (total, { start, end }) => total + end - start + 1,
+    0,
+  );
+
+  const iterator = generateIps(ranges);
+  const discoveredApis = new Set();
+  let stopped = false;
 
   const testNext = async () => {
-    for (;;) {
+    while (!stopped) {
       const { value: address, done } = iterator.next();
       if (done) return;
 
       const apiUrl = `http://${address}:${port}`;
-      if (await isApiAvailable(apiUrl, timeout, path)) {
-        discoveredApis.push(apiUrl);
+      if (!(await isApiAvailable(apiUrl, timeout, path))) continue;
+      if (discoveredApis.has(apiUrl)) continue; // faixas sobrepostas
+
+      discoveredApis.add(apiUrl);
+      try {
         await onFound?.(apiUrl);
+      } catch (error) {
+        stopped = true; // evita que os outros workers continuem em segundo plano
+        throw error;
       }
     }
   };
 
   await Promise.all(
-    Array.from(
-      { length: Math.min(concurrency, range.end - range.start + 1) },
-      testNext,
-    ),
+    Array.from({ length: Math.min(concurrency, totalAddresses) }, testNext),
   );
 
-  return discoveredApis;
+  return [...discoveredApis];
 }
 
 export default discoverApis;

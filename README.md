@@ -18,7 +18,9 @@ If you are developing a production application, we recommend using TypeScript wi
 ## Descoberta de APIs
 
 Em **Configurar API → Procurar APIs na rede**, a GUI testa `GET /` na porta 3000,
-um endereço por vez. Cada resposta 200 atualiza imediatamente a lista exibida e
+usando as sub-redes IPv4 reais detectadas por `node ip.js` antes da inicialização
+do Vite. A configuração é carregada em runtime por `local-network.json`, sem
+depender de variáveis injetadas pelo Vite. Cada resposta 200 atualiza imediatamente a lista exibida e
 compartilhada (`api.apiUrl`), o `localStorage` e o arquivo `api/peers.csv`, sem duplicatas.
 O CSV tem somente a coluna `url`, por exemplo `http://192.168.0.10:3000`:
 ela já reúne protocolo, IP e porta. O arquivo registra descobertas; a lista inicial

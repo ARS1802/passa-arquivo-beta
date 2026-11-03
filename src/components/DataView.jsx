@@ -1,4 +1,4 @@
-import { Alert, ListGroup, Spinner } from "react-bootstrap";
+import { Alert, Col, ListGroup, Row, Spinner } from "react-bootstrap";
 
 function DataView({ data, loading, error }) {
   if (loading) {
@@ -21,8 +21,23 @@ function DataView({ data, loading, error }) {
 
   return (
     <ListGroup>
+      <ListGroup.Item className="fw-bold">
+        <Row>
+          <Col>Nome</Col>
+          <Col>Tamanho</Col>
+          <Col>Última modificação</Col>
+          <Col>MIME type</Col>
+        </Row>
+      </ListGroup.Item>
       {data.map((file) => (
-        <ListGroup.Item key={file.filename}>{file.filename}</ListGroup.Item>
+        <ListGroup.Item key={file.filename}>
+          <Row>
+            <Col>{file.filename}</Col>
+            <Col>{file.size} bytes</Col>
+            <Col>{file.lastModified}</Col>
+            <Col>{file.mimeType}</Col>
+          </Row>
+        </ListGroup.Item>
       ))}
     </ListGroup>
   );

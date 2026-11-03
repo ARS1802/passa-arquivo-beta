@@ -1,4 +1,6 @@
 import { Alert, Col, ListGroup, Row, Spinner } from "react-bootstrap";
+import api from "../../api/api.js";
+import FileItem from "./FileItem.jsx";
 
 function DataView({ data, loading, error }) {
   if (loading) {
@@ -30,14 +32,11 @@ function DataView({ data, loading, error }) {
         </Row>
       </ListGroup.Item>
       {data.map((file) => (
-        <ListGroup.Item key={file.filename}>
-          <Row>
-            <Col>{file.filename}</Col>
-            <Col>{file.size} bytes</Col>
-            <Col>{file.lastModified}</Col>
-            <Col>{file.mimeType}</Col>
-          </Row>
-        </ListGroup.Item>
+        <FileItem
+          key={file.filename}
+          file={file}
+          onClick={() => api.downloadFile(file.filename)}
+        />
       ))}
     </ListGroup>
   );

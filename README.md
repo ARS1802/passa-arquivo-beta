@@ -27,6 +27,16 @@ responsável somente por seus endpoints.
 versão compilada. `npm run lint` verifica o código da interface.
 Veja os detalhes da descoberta de APIs em [view/README.md](view/README.md).
 
+## Modelo de arquivo
+
+`model/File.js` contém a classe `File` utilizada pelas rotas de upload, download
+e listagem da API. Ela representa o conteúdo com `Buffer` e oferece conversão
+entre esse conteúdo e Base64. As rotas de upload e download verificam os nomes
+recebidos com `File.isValidFilename`.
+
+A interface em `view/` envia e recebe objetos JSON por HTTP, sem instanciar essa
+classe. Os módulos de `view/api/` fazem as requisições e tratam suas respostas.
+
 ## CORS
 
 A API usa o middleware `cors` em `index.js` para permitir que páginas de qualquer

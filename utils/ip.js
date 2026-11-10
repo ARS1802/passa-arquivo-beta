@@ -1,3 +1,4 @@
+//Este arquivo só existe para obter a faixa de ip em que a placa de rede se encontra e exportar numa variavél local. Facilitando a busca por outros endereços de ip.
 import os from "node:os";
 
 /**

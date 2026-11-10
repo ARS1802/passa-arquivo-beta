@@ -5,6 +5,7 @@
  * GET /files - lista os arquivos compartilhados.
  */
 import express from "express";
+import cors from "cors";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,17 +24,13 @@ const documentationPage = path.resolve(
 );
 
 app.use(express.json({ limit: "134mb" }));
-app.use((_request, response, next) => {
-  response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (_request.method === "OPTIONS") {
-    return response.sendStatus(204);
-  }
-
-  return next();
-});
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+  }),
+);
 app.get("/", (_request, response, next) => {
   return response.sendStatus(200);
 });

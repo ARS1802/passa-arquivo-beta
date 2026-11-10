@@ -1,5 +1,12 @@
 # Passa Arquivo
 
+## CORS
+
+A API usa o middleware `cors` em `index.js` para permitir que páginas de qualquer
+origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST` e
+`OPTIONS` e o cabeçalho `Content-Type`. O middleware responde automaticamente às
+consultas prévias do navegador (preflight) com status `204`.
+
 ## Upload
 
 Envie um JSON com o nome do arquivo e seu conteúdo em Base64:

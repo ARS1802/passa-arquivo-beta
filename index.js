@@ -17,6 +17,7 @@ import getLocalIp from "./utils/ip.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
+const host = process.env.HOST || "0.0.0.0";
 const uploadDirectory = path.resolve(process.env.UPLOAD_DIR || "uploads");
 const documentationPage = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -42,7 +43,7 @@ app.use(errorHandler);
 
 await mkdir(uploadDirectory, { recursive: true });
 
-app.listen(port, () => {
+app.listen(port, host, () => {
   console.log(`>>>API INICIADA<<<\nhttp://${getLocalIp()}:${port}`);
 });
 

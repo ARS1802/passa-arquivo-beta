@@ -2,9 +2,30 @@
 
 ## Execução
 
-O script `npm start` executa `index.js` diretamente no Node.js, sem etapa de build.
-O servidor disponibiliza os endpoints da API e não serve uma interface web.
-Uma interface web deve ser servida separadamente e consumir a API por HTTP.
+A API fica na raiz do repositório e a interface React/Vite fica em `view/`.
+As dependências e os scripts das duas partes estão no `package.json` da raiz.
+Execute os comandos abaixo a partir da raiz do repositório:
+
+```bash
+npm install
+npm start
+```
+
+O script `npm start` executa `index.js` diretamente no Node.js, sem etapa de build,
+e usa o diretório de arquivos definido por `UPLOAD_DIR` no próprio script.
+Em outro terminal, inicie a interface:
+
+```bash
+npm run dev
+```
+
+Esse comando executa `view/ip.js` para gerar a configuração de rede local e inicia
+o Vite em `view/`. A interface consome a API por HTTP; o servidor da API continua
+responsável somente por seus endpoints.
+
+`npm run build` gera a interface em `view/dist/`, e `npm run preview` serve essa
+versão compilada. `npm run lint` verifica o código da interface.
+Veja os detalhes da descoberta de APIs em [view/README.md](view/README.md).
 
 ## CORS
 

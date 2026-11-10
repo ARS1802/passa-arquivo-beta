@@ -8,10 +8,27 @@
   "main": "index.js",
   "scripts": {
     "start": "export UPLOAD_DIR='/home/arthur/Imagens/Background Desktop' ; node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "cd view && node ip.js && vite",
+    "build": "cd view && vite build",
+    "lint": "cd view && oxlint",
+    "preview": "cd view && vite preview"
   },
   "dependencies": {
     "cors": "^2.8.6",
-    "express": "^5.3.0"
+    "express": "^5.3.0",
+    "bootstrap": "^5.3.8",
+    "dotenv": "^18.0.9",
+    "react": "^19.3.1",
+    "react-bootstrap": "^2.10.10",
+    "react-dom": "^19.3.1"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.89.0",
+    "vite": "^8.3.5"
   }
 }

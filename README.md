@@ -8,10 +8,10 @@ Execute os comandos abaixo a partir da raiz do repositório:
 
 ```bash
 npm install
-npm start
+npm run api
 ```
 
-O script `npm start` executa `controller/index.js` diretamente no Node.js, sem etapa de build,
+O script `npm run api` executa `controller/index.js` diretamente no Node.js, sem etapa de build,
 e usa o diretório de arquivos definido por `UPLOAD_DIR` no próprio script.
 Em outro terminal, inicie a interface:
 
@@ -20,14 +20,14 @@ npm run dev
 ```
 
 Esse comando inicia o Vite em `view/`. Durante a inicialização, sua configuração usa
-`model/Network.js` para obter as sub-redes e gerar a configuração de rede local.
+`model/Network.js` para obter as sub-redes e inseri-las no JavaScript da interface.
 A interface consome a API por HTTP; o servidor da API continua
 responsável somente por seus endpoints.
 
 `npm run build` gera a interface em `view/dist/`, e `npm run preview` serve essa
 versão compilada. `npm run lint` verifica o código da interface.
-A descoberta lê as sub-redes de `view/public/local-network.json`, gerado pela
-configuração do Vite ao iniciar o servidor de desenvolvimento.
+A descoberta lê as sub-redes de `import.meta.env.LOCAL_NETWORK_CIDRS`, preenchido
+pelo `define` do Vite. Nenhum arquivo JSON ou rota adicional é necessário.
 
 ## Informações de rede
 
@@ -35,10 +35,15 @@ configuração do Vite ao iniciar o servidor de desenvolvimento.
 pelos módulos que a importam no mesmo processo. O método `obtainCidrs()` atualiza
 as sub-redes IPv4 locais no atributo `cidrs`. Esse atributo é somente leitura
 para quem usa a instância, e os elementos da lista também são protegidos contra
-alterações externas. Antes da primeira consulta, a lista está vazia.
+alterações externas. A instância obtém os CIDRs antes de ser exportada.
 
-A classe consulta a rede; a configuração do Vite grava o JSON consumido pela
-interface. Execute `npm test` para verificar o singleton e a coleta das sub-redes.
+A classe consulta a rede; a configuração do Vite insere uma cópia dos CIDRs no
+código da interface. O navegador não importa a classe, que depende de Node.js.
+Se a lista estiver vazia, a descoberta tenta WebRTC e depois sub-redes comuns.
+
+Os valores representam a rede da máquina que executou o Vite. Ao trocar de rede,
+reinicie `npm run dev` ou gere outra build. Uma build distribuída para outra
+máquina mantém os CIDRs de onde foi gerada; `npm run preview` não os atualiza.
 
 ## Modelo de arquivo
 

@@ -148,17 +148,9 @@ export function detectLocalCidrs(timeout = LOCAL_DETECTION_TIMEOUT) {
  * @returns {Promise<string[]>}
  */
 export async function getLocalNetworkCidrs() {
-  try {
-    const response = await fetch("/local-network.json", {
-      cache: "no-store",
-    });
-    if (response.ok) {
-      const { cidrs } = await response.json();
-      if (Array.isArray(cidrs) && cidrs.length > 0) return cidrs;
-    }
-  } catch {
-    // Usa a detecção do navegador quando a configuração runtime não estiver disponível.
-  }
+  // O Vite insere estes valores ao iniciar ou compilar a interface.
+  const cidrs = import.meta.env.LOCAL_NETWORK_CIDRS;
+  if (Array.isArray(cidrs) && cidrs.length > 0) return cidrs;
 
   const detected = await detectLocalCidrs();
   return detected.length > 0 ? detected : COMMON_LOCAL_CIDRS;

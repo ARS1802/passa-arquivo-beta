@@ -26,4 +26,6 @@ class Network {
 }
 
 // Os módulos que importam este arquivo compartilham a mesma instância.
-export default new Network();
+const network = new Network();
+network.obtainCidrs();
+export default network;

@@ -31,8 +31,11 @@ app.use(
     allowedHeaders: ["Content-Type"],
   }),
 );
-app.get("/", (_request, response, next) => {
+app.get("/", (_request, response) => {
   return response.sendStatus(200);
+});
+app.get("/api", (_request, response) => {
+  return response.sendFile(documentationPage);
 });
 app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));

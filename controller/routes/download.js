@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
-import File from "../model/File.js";
+import File from "../../model/File.js";
 
 export default function downloadRoute(uploadDirectory) {
   const router = Router();

@@ -9,7 +9,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
-import File from "../model/File.js";
+import File from "../../model/File.js";
 
 export default function listRoute(uploadDirectory) {
   const router = Router();

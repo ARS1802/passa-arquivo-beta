@@ -5,11 +5,11 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "index.js",
+  "main": "controller/index.js",
   "scripts": {
-    "start": "export UPLOAD_DIR='/home/arthur/Imagens/Background Desktop' ; node index.js",
+    "start": "export UPLOAD_DIR='/home/arthur/Imagens/Background Desktop' ; node controller/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "cd view && node ip.js && vite",
+    "dev": "cd view && node ../model/ip.js && vite",
     "build": "cd view && vite build",
     "lint": "cd view && oxlint",
     "preview": "cd view && vite preview"

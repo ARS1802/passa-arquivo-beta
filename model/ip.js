@@ -2,7 +2,9 @@ import os from "node:os";
 import { mkdirSync, writeFileSync } from "node:fs";
 import dotenv from "dotenv";
 
-dotenv.config({ path: ".env.local" });
+// Resolve os caminhos pela localização do arquivo, independentemente do terminal.
+const publicDirectory = new URL("../view/public/", import.meta.url);
+dotenv.config({ path: new URL("../view/.env.local", import.meta.url) });
 
 const cidrs = Object.values(os.networkInterfaces())
   .flatMap((addresses) => addresses ?? [])
@@ -14,9 +16,9 @@ const cidrs = Object.values(os.networkInterfaces())
   )
   .map((address) => address.cidr);
 
-mkdirSync("public", { recursive: true });
+mkdirSync(publicDirectory, { recursive: true });
 writeFileSync(
-  "public/local-network.json",
+  new URL("local-network.json", publicDirectory),
   `${JSON.stringify({ cidrs }, null, 2)}\n`,
 );
 

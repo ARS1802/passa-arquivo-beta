@@ -12,8 +12,7 @@ import { fileURLToPath } from "node:url";
 import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
-import errorHandler from "./utils/error-handler.js";
-import getLocalIp from "./utils/ip.js";
+import errorHandler from "../model/utils/error-handler.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,7 +20,7 @@ const host = process.env.HOST || "0.0.0.0";
 const uploadDirectory = path.resolve(process.env.UPLOAD_DIR || "uploads");
 const documentationPage = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "pages/index.html",
+  "../view/pages/index.html",
 );
 
 app.use(express.json({ limit: "134mb" }));
@@ -44,7 +43,7 @@ app.use(errorHandler);
 await mkdir(uploadDirectory, { recursive: true });
 
 app.listen(port, host, () => {
-  console.log(`>>>API INICIADA<<<\nhttp://${getLocalIp()}:${port}`);
+  console.log(`>>>API INICIADA<<<\nEscutando em ${host}:${port}`);
 });
 
 export default app;

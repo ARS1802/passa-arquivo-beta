@@ -71,7 +71,7 @@ function ApiUrlConfig() {
 
     try {
       let foundCount = 0;
-      const discoveredUrls = await api.discoverApis(undefined, () => {
+      const discoveredUrls = await api.discoverApis(() => {
         setSelectedApiUrl(api.getSelectedApiUrl());
         setFeedbackVariant("success");
         setFeedback(

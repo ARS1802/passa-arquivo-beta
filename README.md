@@ -39,7 +39,9 @@ alterações externas. A instância obtém os CIDRs antes de ser exportada.
 
 A classe consulta a rede; a configuração do Vite insere uma cópia dos CIDRs no
 código da interface. O navegador não importa a classe, que depende de Node.js.
-Se a lista estiver vazia, a descoberta tenta WebRTC e depois sub-redes comuns.
+A descoberta pesquisa exclusivamente essas sub-redes. Se a lista estiver vazia,
+retorna uma lista vazia de APIs, sem fazer requisições de descoberta. Não há
+detecção por WebRTC, faixas predefinidas ou parâmetro para fornecer outras faixas.
 
 Os valores representam a rede da máquina que executou o Vite. Ao trocar de rede,
 reinicie `npm run dev` ou gere outra build. Uma build distribuída para outra

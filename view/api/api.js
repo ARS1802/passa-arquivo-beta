@@ -100,18 +100,16 @@ class Api {
   }
 
   /**
-   * Descobre todos os endereços IPv4 da rede local cuja API responde 200 a
+   * Descobre APIs nas sub-redes de LOCAL_NETWORK_CIDRS que respondem 200 a
    * GET em "/". Cada API encontrada é adicionada à lista e ao peers.csv
    * durante a busca.
    *
-   * @param {string | string[]} [cidr] - Faixa(s) IPv4 em notação CIDR. Se
-   *   omitido, varre a rede local (sub-rede detectada ou sub-redes comuns).
    * @param {(url: string) => void} [onFound] - Notifica a interface após atualizar a lista.
    * @returns {Promise<string[]>} URLs encontradas nesta busca.
    * @throws {Error} Se não for possível persistir uma descoberta, interrompe a busca.
    */
-  async discoverApis(cidr, onFound) {
-    return scanNetwork(cidr, {
+  async discoverApis(onFound) {
+    return scanNetwork({
       path: "/", // só entra na lista quem responde 200 a GET /
       onFound: async (apiUrl) => {
         if (!this.apiUrl.includes(apiUrl)) this.apiUrl.push(apiUrl);

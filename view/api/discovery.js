@@ -2,23 +2,6 @@ const DEFAULT_PORT = 3000;
 const DEFAULT_CONCURRENCY = 500;
 const DEFAULT_TIMEOUT = 1500;
 const DEFAULT_PATH = "/";
-const SKIP_RESERVED = true;
-const LOCAL_DETECTION_TIMEOUT = 1000;
-
-// Sub-redes comuns de roteadores domésticos e corporativos. Usadas apenas
-// quando o navegador não revela em qual sub-rede o dispositivo está.
-const COMMON_LOCAL_CIDRS = [
-  "192.168.0.0/24",
-  "192.168.1.0/24",
-  "192.168.2.0/24",
-  "192.168.15.0/24",
-  "192.168.18.0/24",
-  "192.168.100.0/24",
-  "10.0.0.0/24",
-  "10.0.1.0/24",
-  "10.1.1.0/24",
-  "172.16.0.0/24",
-];
 
 export function isValidIpv4(ip) {
   if (typeof ip !== "string") return false;
@@ -63,105 +46,15 @@ function parseCidr(cidr) {
   return { start, end: start + size - 1 };
 }
 
-const RESERVED_RANGES = [
-  "0.0.0.0/8",
-  "10.0.0.0/8",
-  "100.64.0.0/10",
-  "127.0.0.0/8",
-  "169.254.0.0/16",
-  "172.16.0.0/12",
-  "192.168.0.0/16",
-  "224.0.0.0/4",
-  "240.0.0.0/4",
-].map(parseCidr);
-
-const PRIVATE_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"].map(
-  parseCidr,
-);
-
-function isReserved(number) {
-  return RESERVED_RANGES.some(
-    ({ start, end }) => number >= start && number <= end,
-  );
-}
-
-function isPrivateIpv4(ip) {
-  if (!isValidIpv4(ip)) return false;
-
-  const number = ipToNumber(ip);
-  return PRIVATE_RANGES.some(
-    ({ start, end }) => number >= start && number <= end,
-  );
-}
-
-/**
- * Tenta descobrir a(s) sub-rede(s) /24 do dispositivo usando WebRTC.
- * Navegadores modernos podem ocultar o IP local (mDNS); nesse caso
- * retorna uma lista vazia.
- *
- * @param {number} [timeout=1000]
- * @returns {Promise<string[]>} Ex.: ["192.168.1.0/24"]
- */
-export function detectLocalCidrs(timeout = LOCAL_DETECTION_TIMEOUT) {
-  if (typeof RTCPeerConnection === "undefined") return Promise.resolve([]);
-
-  return new Promise((resolve) => {
-    const cidrs = new Set();
-    let connection;
-    let timer;
-
-    const finish = () => {
-      clearTimeout(timer);
-      connection?.close();
-      resolve([...cidrs]);
-    };
-
-    try {
-      connection = new RTCPeerConnection({ iceServers: [] });
-      timer = setTimeout(finish, timeout);
-
-      connection.createDataChannel("");
-      connection.onicecandidate = ({ candidate }) => {
-        if (!candidate) return finish();
-
-        // "candidate:<id> <comp> <proto> <prio> <endereço> <porta> typ ..."
-        const address = candidate.candidate.split(" ")[4];
-        if (isPrivateIpv4(address)) {
-          cidrs.add(`${address.split(".").slice(0, 3).join(".")}.0/24`);
-        }
-      };
-
-      connection
-        .createOffer()
-        .then((offer) => connection.setLocalDescription(offer))
-        .catch(finish);
-    } catch {
-      finish();
-    }
-  });
-}
-
-/**
- * Faixas a varrer para cobrir a rede local: a sub-rede detectada ou,
- * se não for possível detectá-la, as sub-redes mais comuns.
- *
- * @returns {Promise<string[]>}
- */
-export async function getLocalNetworkCidrs() {
-  // O Vite insere estes valores ao iniciar ou compilar a interface.
+/** Retorna somente as sub-redes fornecidas pelo Vite. */
+export function getLocalNetworkCidrs() {
   const cidrs = import.meta.env.LOCAL_NETWORK_CIDRS;
-  if (Array.isArray(cidrs) && cidrs.length > 0) return cidrs;
-
-  const detected = await detectLocalCidrs();
-  return detected.length > 0 ? detected : COMMON_LOCAL_CIDRS;
+  return Array.isArray(cidrs) ? cidrs : [];
 }
 
 function* generateIps(ranges) {
   for (const range of ranges) {
-    const skipReserved = SKIP_RESERVED && !isReserved(range.start);
-
     for (let number = range.start; number <= range.end; number += 1) {
-      if (skipReserved && isReserved(number)) continue;
       yield numberToIp(number);
     }
   }
@@ -182,10 +75,7 @@ async function isApiAvailable(apiUrl, timeout, path) {
 
 /**
  * Procura APIs que respondem 200 a GET em `path` (padrão "/") nas faixas
- * IPv4 informadas. Sem faixa, varre a rede local.
- *
- * @param {string | string[]} [cidr] Faixa(s) IPv4 em notação CIDR. Se
- *   omitido ou vazio, usa a rede local (detectada ou sub-redes comuns).
+ * IPv4 de LOCAL_NETWORK_CIDRS. Sem sub-redes, retorna uma lista vazia.
  * @param {object} [options]
  * @param {number} [options.port=3000]
  * @param {number} [options.concurrency=500]
@@ -195,7 +85,7 @@ async function isApiAvailable(apiUrl, timeout, path) {
  *   Chamado uma vez por API encontrada. Se lançar erro, a busca é interrompida.
  * @returns {Promise<string[]>}
  */
-export async function discoverApis(cidr, options = {}) {
+export async function discoverApis(options = {}) {
   const {
     port = DEFAULT_PORT,
     concurrency = DEFAULT_CONCURRENCY,
@@ -217,13 +107,7 @@ export async function discoverApis(cidr, options = {}) {
     throw new Error("Informe um caminho válido.");
   }
 
-  const requested = [cidr]
-    .flat()
-    .filter((item) => typeof item === "string" && item.trim());
-  const cidrs =
-    requested.length > 0 ? requested : await getLocalNetworkCidrs();
-
-  const ranges = cidrs.map((item) => parseCidr(item.trim()));
+  const ranges = getLocalNetworkCidrs().map((item) => parseCidr(item.trim()));
   const totalAddresses = ranges.reduce(
     (total, { start, end }) => total + end - start + 1,
     0,

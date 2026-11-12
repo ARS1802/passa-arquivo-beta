@@ -12,7 +12,6 @@ import { fileURLToPath } from "node:url";
 import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
-import errorHandler from "../model/utils/error-handler.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -41,7 +40,16 @@ app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));
 app.use("/files", listRoute(uploadDirectory));
 
-app.use(errorHandler);
+app.use((error, request, response, next) => {
+  if (error.type === "entity.too.large") {
+    return response
+      .status(413)
+      .json({ error: "Arquivo excede o limite de 100 MB." });
+  }
+
+  console.error(error);
+  return response.status(500).json({ error: "Erro interno do servidor." });
+});
 
 await mkdir(uploadDirectory, { recursive: true });
 

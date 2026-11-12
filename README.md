@@ -19,14 +19,26 @@ Em outro terminal, inicie a interface:
 npm run dev
 ```
 
-Esse comando executa `model/ip.js` para gerar a configuração de rede local e inicia
-o Vite em `view/`. A interface consome a API por HTTP; o servidor da API continua
+Esse comando inicia o Vite em `view/`. Durante a inicialização, sua configuração usa
+`model/Network.js` para obter as sub-redes e gerar a configuração de rede local.
+A interface consome a API por HTTP; o servidor da API continua
 responsável somente por seus endpoints.
 
 `npm run build` gera a interface em `view/dist/`, e `npm run preview` serve essa
 versão compilada. `npm run lint` verifica o código da interface.
-A descoberta lê as sub-redes de `view/public/local-network.json`, gerado por
-`model/ip.js`.
+A descoberta lê as sub-redes de `view/public/local-network.json`, gerado pela
+configuração do Vite ao iniciar o servidor de desenvolvimento.
+
+## Informações de rede
+
+`model/Network.js` exporta uma única instância da classe `Network`, compartilhada
+pelos módulos que a importam no mesmo processo. O método `obtainCidrs()` atualiza
+as sub-redes IPv4 locais no atributo `cidrs`. Esse atributo é somente leitura
+para quem usa a instância, e os elementos da lista também são protegidos contra
+alterações externas. Antes da primeira consulta, a lista está vazia.
+
+A classe consulta a rede; a configuração do Vite grava o JSON consumido pela
+interface. Execute `npm test` para verificar o singleton e a coleta das sub-redes.
 
 ## Modelo de arquivo
 

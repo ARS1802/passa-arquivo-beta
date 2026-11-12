@@ -8,8 +8,8 @@
   "main": "controller/index.js",
   "scripts": {
     "start": "export UPLOAD_DIR='/home/arthur/Imagens/Background Desktop' ; node controller/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "cd view && node ../model/ip.js && vite",
+    "test": "node --test",
+    "dev": "cd view && vite",
     "build": "cd view && vite build",
     "lint": "cd view && oxlint",
     "preview": "cd view && vite preview"

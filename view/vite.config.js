@@ -1,8 +1,25 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isIPv4 } from 'node:net'
 import path from 'node:path'
+import network from '../model/Network.js'
+
+/** Publica as sub-redes para a descoberta feita pelo navegador. */
+function configureLocalNetwork(server) {
+  network.obtainCidrs()
+  const { cidrs } = network
+  mkdirSync(server.config.publicDir, { recursive: true })
+  writeFileSync(
+    path.join(server.config.publicDir, 'local-network.json'),
+    `${JSON.stringify({ cidrs }, null, 2)}\n`,
+  )
+  console.log(
+    cidrs.length > 0
+      ? `Sub-redes locais: ${cidrs.join(', ')}`
+      : 'Nenhuma sub-rede IPv4 local encontrada.',
+  )
+}
 
 /**
  * Recebe cada descoberta da GUI e acrescenta sua URL ao CSV, sem duplicatas.
@@ -45,6 +62,9 @@ function configurePeers(server) {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), {
+    name: 'local-network',
+    configureServer: configureLocalNetwork,
+  }, {
     name: 'peers-csv',
     configureServer: configurePeers,
     configurePreviewServer: configurePeers,

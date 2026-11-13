@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Button, Form, InputGroup } from "react-bootstrap";
-import api from "../../api/api.js";
+import api from "../../../controller/fetchers/API.js";
 
 function ApiUrlConfig() {
   const [value, setValue] = useState("");

@@ -55,7 +55,7 @@ entre esse conteúdo e Base64. As rotas de upload e download verificam os nomes
 recebidos com `File.isValidFilename`.
 
 A interface em `view/` envia e recebe objetos JSON por HTTP, sem instanciar essa
-classe. Os módulos de `view/api/` fazem as requisições e tratam suas respostas.
+classe. Os módulos de `controller/fetchers/` fazem as requisições e tratam suas respostas.
 
 ## CORS
 
@@ -93,5 +93,5 @@ A resposta contém `filename`, `size` e `data` em Base64.
 - `model/`: modelo de arquivo e detecção da rede local.
 - `model/utils/`: utilitários da API.
 - `view/src/`: interface React.
-- `view/api/`: comunicação da interface com as APIs.
+- `controller/fetchers/`: comunicação da interface com as APIs.
 - `view/pages/`: página HTML de documentação.

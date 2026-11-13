@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Card, Container } from "react-bootstrap";
-import api from "../../api/api.js";
+import api from "../../../controller/fetchers/API.js";
 import DataView from "../components/DataView.jsx";
 import FileUploadButton from "../components/FileUploadButton.jsx";
 import ApiUrlPage from "./ApiUrlPage.jsx";

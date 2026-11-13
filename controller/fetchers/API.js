@@ -6,7 +6,7 @@ import { uploadFile } from "./upload.js";
 const STORAGE_KEY = "passa-arquivo-api-urls";
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-class Api {
+class API {
   constructor() {
     this.apiUrl = this.readStoredApiUrls();
     this.selectedApiUrl = this.apiUrl[0];
@@ -148,5 +148,5 @@ class Api {
   }
 }
 
-export const api = new Api();
+export const api = new API();
 export default api;

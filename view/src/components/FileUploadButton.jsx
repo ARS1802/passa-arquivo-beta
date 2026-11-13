@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Alert, Button } from "react-bootstrap";
-import api from "../../api/api.js";
+import api from "../../../controller/fetchers/API.js";
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);

@@ -10,7 +10,7 @@ import network from "../model/Network.js";
  * @param {import('vite').ViteDevServer | import('vite').PreviewServer} server - Servidor local da GUI.
  */
 function configurePeers(server) {
-  const peersFile = path.resolve(server.config.root, "api/peers.csv");
+  const peersFile = path.resolve(server.config.root, "../controller/fetchers/peers.csv");
   server.middlewares.use((request, response, next) => {
     const requestUrl = new URL(request.url, "http://localhost");
     if (requestUrl.pathname !== "/api/peers.csv" || request.method !== "POST")

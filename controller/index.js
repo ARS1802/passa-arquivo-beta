@@ -12,10 +12,11 @@ import { fileURLToPath } from "node:url";
 import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
+import network from "../model/Network.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
-const host = process.env.HOST || "0.0.0.0";
+const host = process.env.HOST || network.getIps()[0];
 const uploadDirectory = path.resolve(process.env.UPLOAD_DIR || "uploads");
 const documentationPage = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,6 +32,7 @@ app.use(
   }),
 );
 app.get("/", (_request, response) => {
+  if (_request) console.log("Fui encontrado!");
   return response.sendStatus(200);
 });
 app.get("/api", (_request, response) => {

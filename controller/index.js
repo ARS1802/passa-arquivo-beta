@@ -40,7 +40,7 @@ app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));
 app.use("/files", listRoute(uploadDirectory));
 
-app.use((error, request, response, next) => {
+app.use((error, request, response) => {
   if (error.type === "entity.too.large") {
     return response
       .status(413)

@@ -45,7 +45,7 @@ class Api {
     }
 
     try {
-      await fetch(`${apiUrl.trim().replace(/\/+$/, "")}/health`);
+      await fetch(`${apiUrl.trim().replace(/\/+$/, "")}/`);
       return true;
     } catch {
       return false;

@@ -3,9 +3,18 @@ import os from "node:os";
 class Network {
   #cidrs = Object.freeze([]);
 
+  constructor() {
+    this.obtainCidrs();
+  }
+
   // O getter permite consultar a lista, sem substituir o atributo por fora da classe.
   get cidrs() {
     return this.#cidrs;
+  }
+
+  /** Retorna o IP de cada CIDR, sem o prefixo da sub-rede (ex.: /24). */
+  getIps() {
+    return this.#cidrs.map((cidr) => cidr.split("/")[0]);
   }
 
   /** Atualiza as sub-redes IPv4 locais, ignorando interfaces internas. */
@@ -27,5 +36,4 @@ class Network {
 
 // Os módulos que importam este arquivo compartilham a mesma instância.
 const network = new Network();
-network.obtainCidrs();
 export default network;

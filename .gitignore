@@ -2,3 +2,6 @@
 AGENTS.md
 view/dist
 /dist
+/model/identity.json
+/model/identity.json.tmp
+/controller/peers.csv.tmp

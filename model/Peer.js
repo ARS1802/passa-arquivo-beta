@@ -1,16 +1,54 @@
-const COLUMNS = ["name", "ip", "certificateHash"];
+import { randomUUID } from "node:crypto";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { isIPv4 } from "node:net";
+import network from "./Network.js";
+
+const IDENTITY_FILE = new URL("./identity.json", import.meta.url);
+const PEERS_FILE = new URL("../controller/peers.csv", import.meta.url);
+const COLUMNS = ["nome", "ip", "id"];
 const HEADER = COLUMNS.join(",");
-const DEFAULT_LOCAL_STORAGE_KEY = "passa-arquivo-peers";
-function validateText(value, field) {
-  if (typeof value !== "string" || !value.trim() || /[\r\n]/.test(value)) {
-    throw new TypeError(
-      `${field} deve ser um texto não vazio, em uma única linha.`,
-    );
+
+function validateNome(nome) {
+  if (
+    typeof nome !== "string" || !nome.trim() ||
+    [...nome].length > 15 || /\s/u.test(nome)
+  ) {
+    throw new TypeError("O nome deve ter de 1 a 15 caracteres, sem espaços.");
   }
 }
 
+function validateId(id) {
+  if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) {
+    throw new TypeError("O id deve ser um UUID gerado por randomUUID().");
+  }
+}
+
+function validatePeer(peer) {
+  validateNome(peer.nome);
+  validateId(peer.id);
+  if (typeof peer.ip !== "string" || !isIPv4(peer.ip)) {
+    throw new TypeError("Informe um endereço IPv4 válido.");
+  }
+}
+
+function readFile(file, fallback) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return fallback;
+    throw error;
+  }
+}
+
+function writeFile(file, content) {
+  // Só substitui o arquivo original depois que o novo conteúdo estiver escrito.
+  const temporaryFile = new URL(`${file.href}.tmp`);
+  writeFileSync(temporaryFile, content, "utf8");
+  renameSync(temporaryFile, file);
+}
+
 function parseRow(line) {
-  // Aspas duplicadas representam uma aspa dentro de uma célula do CSV.
+  // No CSV, aspas duplicadas representam uma aspa dentro da célula.
   const cell = /("(?:[^"]|"")*"|[^",]*)(,|$)/y;
   const values = [];
   let match;
@@ -22,182 +60,123 @@ function parseRow(line) {
       value.startsWith('"') ? value.slice(1, -1).replaceAll('""', '"') : value,
     );
   } while (match[2] === ",");
-
   if (values.length !== COLUMNS.length) {
-    throw new Error(
-      "Cada registro deve conter nome, IPv4 e hash do certificado.",
-    );
+    throw new Error("Cada registro deve conter nome, ip e id.");
   }
-  return values;
+  return Object.fromEntries(COLUMNS.map((column, index) => [column, values[index]]));
 }
 
 export default class Peer {
-  #name;
+  static #instance;
+  #nome;
   #ip;
-  #certificateHash;
+  #id;
 
-  constructor(name, ip, certificateHash) {
-    validateText(name, "Nome");
-    validateText(certificateHash, "Hash do certificado");
-    this.#name = name;
-    this.#certificateHash = certificateHash;
-    this.ip = ip;
+  constructor(nome) {
+    if (Peer.#instance) return Peer.#instance;
+
+    const stored = readFile(IDENTITY_FILE, null);
+    const identity = stored === null
+      ? { nome, id: randomUUID() }
+      : JSON.parse(stored);
+
+    // Uma identidade inválida não é sobrescrita: isso evita perder o id da máquina.
+    if (!identity || typeof identity !== "object" ||
+        (stored !== null && !Object.hasOwn(identity, "ip"))) {
+      throw new Error("identity.json deve conter nome, ip e id.");
+    }
+    network.obtainCidrs();
+    const current = { nome: identity.nome, id: identity.id, ip: network.getIps()[0] };
+    validatePeer(current);
+    this.#nome = current.nome;
+    this.#ip = current.ip;
+    this.#id = current.id;
+    writeFile(IDENTITY_FILE, `${JSON.stringify(this, null, 2)}\n`);
+    Object.freeze(this);
+    Peer.#instance = this;
   }
 
-  // Nome e certificado identificam o dispositivo; somente o IP pode mudar.
-  get name() {
-    return this.#name;
+  get nome() {
+    return this.#nome;
   }
+
+  set nome(value) {
+    validateNome(value);
+    writeFile(IDENTITY_FILE, `${JSON.stringify({ ...this.toJSON(), nome: value }, null, 2)}\n`);
+    this.#nome = value;
+  }
+
   get ip() {
     return this.#ip;
   }
-  get certificateHash() {
-    return this.#certificateHash;
-  }
 
-  set ip(value) {
-    const octets = typeof value === "string" ? value.split(".") : [];
-    if (
-      octets.length !== 4 ||
-      !octets.every(
-        (octet) => /^(0|[1-9]\d{0,2})$/.test(octet) && Number(octet) <= 255,
-      )
-    ) {
-      throw new TypeError("Informe um endereço IPv4 válido.");
-    }
-    this.#ip = value;
+  // Sem setter: o id é criado uma única vez e permanece na identidade persistida.
+  get id() {
+    return this.#id;
   }
 
   toJSON() {
-    return {
-      name: this.name,
-      ip: this.ip,
-      certificateHash: this.certificateHash,
-    };
+    return { nome: this.nome, ip: this.ip, id: this.id };
   }
 
-  /** Converte o conteúdo do CSV em Peers, inclusive no navegador. */
-  static fromCsv(csv) {
-    if (typeof csv !== "string")
-      throw new TypeError("Informe o conteúdo do CSV.");
-    if (!csv) return [];
+  /** Retorna registros simples; somente esta máquina é uma instância de Peer. */
+  getPeers() {
+    const csv = readFile(PEERS_FILE, `${HEADER}\n`);
     const lines = csv.replace(/\r?\n$/, "").split(/\r?\n/);
-    if (lines.shift() !== HEADER)
-      throw new Error(`Cabeçalho esperado: ${HEADER}.`);
-    const peers = lines.map((line) => new Peer(...parseRow(line)));
-    if (
-      new Set(peers.map((peer) => peer.certificateHash)).size !== peers.length
-    ) {
-      throw new Error("Há hashes de certificado duplicados em peers.csv.");
+    if (lines.shift() !== HEADER) {
+      throw new Error(`Cabeçalho esperado em peers.csv: ${HEADER}.`);
+    }
+    const peers = lines.map(parseRow);
+    const ids = new Set();
+    for (const peer of peers) {
+      validatePeer(peer);
+      if (ids.has(peer.id)) throw new Error("Há ids duplicados em peers.csv.");
+      ids.add(peer.id);
     }
     return peers;
   }
 
-  static async #file() {
-    if (typeof window !== "undefined") {
-      throw new Error(
-        "O arquivo peers.csv deve ser acessado pelo servidor Node.js.",
-      );
+  #writePeers(peers) {
+    const rows = peers.map((peer) => COLUMNS.map(
+      (column) => `"${peer[column].replaceAll('"', '""')}"`,
+    ).join(","));
+    writeFile(PEERS_FILE, [HEADER, ...rows, ""].join("\n"));
+  }
+
+  /** Cadastra a identidade recebida do outro dispositivo, sem gerar outro id. */
+  appendPeer(peer) {
+    validatePeer(peer);
+    const peers = this.getPeers();
+    if (peers.some((item) => item.id === peer.id)) {
+      throw new Error("Já existe um peer com esse id.");
     }
-    // O import fica aqui para permitir usar a classe no navegador sem carregar fs.
-    const fs = await import("node:fs");
-    return { fs, path: new URL("./peers.csv", import.meta.url) };
+    peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id });
+    this.#writePeers(peers);
   }
 
-  static #readCsv(fs, path) {
-    try {
-      return fs.readFileSync(path, "utf8");
-    } catch (error) {
-      if (error.code === "ENOENT") return `${HEADER}\n`;
-      throw error;
+  /** Atualiza somente nome e/ou ip; retorna false quando o id não existe. */
+  updatePeer(id, changes) {
+    validateId(id);
+    if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
+        Object.keys(changes).some((column) => !["nome", "ip"].includes(column))) {
+      throw new TypeError("Somente as colunas nome e ip podem ser modificadas.");
     }
-  }
-
-  static #writePeers(fs, path, peers) {
-    const rows = peers.map((peer) =>
-      COLUMNS.map((column) => `"${peer[column].replaceAll('"', '""')}"`).join(
-        ",",
-      ),
-    );
-    fs.writeFileSync(path, [HEADER, ...rows, ""].join("\n"), "utf8");
-  }
-
-  /** Node.js: lê exclusivamente model/peers.csv, independentemente da pasta atual. */
-  async readCsv() {
-    const { fs, path } = await Peer.#file();
-    return Peer.#readCsv(fs, path);
-  }
-
-  async getPeers() {
-    return Peer.fromCsv(await this.readCsv());
-  }
-
-  /** Node.js: cadastra outro Peer ou atualiza seu IP pelo hash, sem duplicá-lo. */
-  async savePeer(peer) {
-    if (!(peer instanceof Peer))
-      throw new TypeError("Informe uma instância de Peer.");
-    const { fs, path } = await Peer.#file();
-    // Não há await entre a leitura e a escrita, evitando sobreposição neste processo.
-    const peers = Peer.fromCsv(Peer.#readCsv(fs, path));
-    const index = peers.findIndex(
-      (item) => item.certificateHash === peer.certificateHash,
-    );
-    if (index === -1) {
-      peers.push(peer);
-    } else {
-      if (peers[index].name !== peer.name)
-        throw new Error("O nome do Peer é imutável.");
-      peers[index] = peer;
-    }
-    Peer.#writePeers(fs, path, peers);
-  }
-
-  /** Node.js: remove pelo hash; retorna false quando o registro não existe. */
-  async removePeer(certificateHash) {
-    validateText(certificateHash, "Hash do certificado");
-    const { fs, path } = await Peer.#file();
-    const peers = Peer.fromCsv(Peer.#readCsv(fs, path));
-    const remaining = peers.filter(
-      (peer) => peer.certificateHash !== certificateHash,
-    );
-    if (remaining.length === peers.length) return false;
-    Peer.#writePeers(fs, path, remaining);
+    const peers = this.getPeers();
+    const index = peers.findIndex((peer) => peer.id === id);
+    if (index === -1) return false;
+    const updated = { ...peers[index], ...changes };
+    validatePeer(updated);
+    peers[index] = updated;
+    this.#writePeers(peers);
     return true;
   }
 
-  /**
-   * Navegador: recebe o CSV entregue pelo Controller e armazena JSON no localStorage.
-   * Sem filtros, salva todos os registros; certificateHash seleciona um registro;
-   * column seleciona name, ip ou certificateHash. Os filtros podem ser combinados.
-   * Ex.: peer.saveToLocalStorage(csv, { column: "ip", key: "ips-dos-peers" }).
-   */
-  saveToLocalStorage(
-    csv,
-    { certificateHash, column, key = DEFAULT_LOCAL_STORAGE_KEY } = {},
-  ) {
-    if (column !== undefined && !COLUMNS.includes(column)) {
-      throw new Error(`Coluna inválida. Use: ${COLUMNS.join(", ")}.`);
-    }
-    validateText(key, "Chave do localStorage");
-    const peers = Peer.fromCsv(csv);
-    let value;
-    if (certificateHash !== undefined) {
-      const peer = peers.find(
-        (item) => item.certificateHash === certificateHash,
-      );
-      if (!peer) throw new Error("Peer não encontrado no CSV.");
-      value = column === undefined ? peer.toJSON() : peer[column];
-    } else {
-      value = peers.map((peer) =>
-        column === undefined ? peer.toJSON() : peer[column],
-      );
-    }
-    if (typeof localStorage === "undefined") {
-      throw new Error(
-        "O localStorage está disponível apenas no ambiente do navegador.",
-      );
-    }
-    localStorage.setItem(key, JSON.stringify(value));
-    return value;
+  removePeer(id) {
+    validateId(id);
+    const peers = this.getPeers();
+    const remaining = peers.filter((peer) => peer.id !== id);
+    if (remaining.length === peers.length) return false;
+    this.#writePeers(remaining);
+    return true;
   }
 }

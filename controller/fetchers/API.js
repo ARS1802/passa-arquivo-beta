@@ -101,17 +101,15 @@ class API {
 
   /**
    * Descobre APIs nas sub-redes de LOCAL_NETWORK_CIDRS que respondem 200 a
-   * GET em "/". Cada API encontrada é adicionada à lista e ao peers.csv
-   * durante a busca.
+   * GET em "/". Cada API encontrada é adicionada à lista de URLs da interface.
    *
    * @param {(url: string) => void} [onFound] - Notifica a interface após atualizar a lista.
    * @returns {Promise<string[]>} URLs encontradas nesta busca.
-   * @throws {Error} Se não for possível persistir uma descoberta, interrompe a busca.
    */
   async discoverApis(onFound) {
     return scanNetwork({
       path: "/", // só entra na lista quem responde 200 a GET /
-      onFound: async (apiUrl) => {
+      onFound: (apiUrl) => {
         if (!this.apiUrl.includes(apiUrl)) this.apiUrl.push(apiUrl);
         if (!this.apiUrl.includes(this.selectedApiUrl)) {
           this.selectedApiUrl = this.apiUrl[0];
@@ -120,17 +118,6 @@ class API {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
         }
         onFound?.(apiUrl);
-        const peersResponse = await fetch(
-          `/api/peers.csv?url=${encodeURIComponent(apiUrl)}`,
-          {
-            method: "POST",
-          },
-        );
-        if (peersResponse.status !== 204) {
-          throw new Error(
-            "API encontrada, mas não foi possível salvar em peers.csv.",
-          );
-        }
       },
     });
   }

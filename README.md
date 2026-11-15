@@ -57,6 +57,53 @@ recebidos com `File.isValidFilename`.
 A interface em `view/` envia e recebe objetos JSON por HTTP, sem instanciar essa
 classe. Os módulos de `controller/fetchers/` fazem as requisições e tratam suas respostas.
 
+## Identidade e cadastro de peers
+
+`model/Peer.js` exporta a classe `Peer`, exclusiva do Node.js. Ela é um Singleton:
+todas as chamadas a `new Peer()` no mesmo processo retornam a mesma instância,
+que representa a máquina atual. O nome inicial fica pendente de quem chamar o
+construtor; deve ter de 1 a 15 caracteres, sem espaços ou outros caracteres de
+espaçamento. Ainda não há uma tela ou inicialização automática na API para defini-lo.
+
+```js
+import Peer from "./model/Peer.js";
+
+const peer = new Peer("MeuPC"); // Nome obrigatório somente na primeira execução.
+console.log(peer.nome, peer.ip, peer.id);
+console.log(new Peer() === peer); // true
+
+// A identidade abaixo deve vir do outro dispositivo, incluindo o UUID dele.
+peer.appendPeer({ nome: "OutroPC", ip: "192.168.1.20", id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a" });
+const peers = peer.getPeers();
+peer.updatePeer(peers[0].id, { nome: "Notebook", ip: "192.168.1.30" });
+peer.removePeer(peers[0].id);
+```
+
+Na primeira criação, `randomUUID()` gera o id e a classe salva `nome`, `ip` e `id`
+em `model/identity.json`. Nas próximas execuções, nome e id vêm desse arquivo,
+mesmo que outro nome seja passado ao construtor. Apenas o IP é obtido novamente
+de `network.getIps()[0]`, após atualizar as interfaces, e salvo no JSON.
+`peer.nome = "NovoNome"` valida e persiste uma alteração de nome. O id não pode
+ser alterado. O JSON é ignorado pelo Git para não distribuir a identidade de uma
+máquina às demais. Um JSON inválido ou a ausência de IPv4 causa erro sem substituir
+a identidade existente.
+
+Os outros peers são registros simples em `controller/peers.csv`, com cabeçalho
+`nome,ip,id`. `getPeers()` lê os registros, `appendPeer()` acrescenta um registro e
+rejeita ids repetidos, `updatePeer(id, { nome, ip })` permite alterar somente nome
+e/ou IP, e `removePeer(id)` exclui pelo id. Atualizar ou excluir um id ausente
+retorna `false`; quando a operação é realizada, retorna `true`. Erros de validação
+lançam exceções sem alterar o cadastro. Os caminhos são relativos ao módulo,
+independentemente da pasta em que o programa é executado.
+
+A descoberta da interface mantém URLs no `localStorage`; ela não cadastra peers
+automaticamente, pois uma URL não fornece nome e UUID. O antigo CSV de URLs e o
+middleware do Vite que o preenchia foram removidos. O cadastro no modelo ainda
+não implementa pareamento ou autenticação de dispositivos.
+
+`npm test` verifica o Singleton, a persistência, as validações e as operações no
+CSV usando arquivos temporários.
+
 ## CORS
 
 A API usa o middleware `cors` em `controller/index.js` para permitir que páginas de qualquer

@@ -13,6 +13,7 @@ import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
 import network from "../model/Network.js";
+import Peer from "../model/Peer.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,6 +23,8 @@ const documentationPage = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../view/pages/index.html",
 );
+const peer = new Peer("megaman");
+console.log(peer);
 
 app.use(express.json({ limit: "134mb" }));
 app.use(
@@ -57,6 +60,7 @@ await mkdir(uploadDirectory, { recursive: true });
 
 app.listen(port, host, () => {
   console.log(`>>>API INICIADA<<<\nEscutando em ${host}:${port}`);
+  console.log(`Este peer se chama: ${peer.nome}`);
 });
 
 export default app;

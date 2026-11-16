@@ -11,8 +11,11 @@ const localApiUrl = `http://${localApiHost}:${process.env.PORT || 3000}`;
 export default defineConfig({
   // Insere uma cópia dos CIDRs no JavaScript enviado ao navegador.
   define: {
+    "import.meta.env.VITE_PORT": JSON.stringify(String(network.vitePort)),
     "import.meta.env.LOCAL_NETWORK_CIDRS": JSON.stringify(network.cidrs),
     "import.meta.env.LOCAL_API_URL": JSON.stringify(localApiUrl),
   },
   plugins: [react()],
+  // A rota GET /peer reconhece a interface local nesta porta.
+  server: { port: network.vitePort, strictPort: true },
 });

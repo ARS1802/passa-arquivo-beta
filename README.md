@@ -104,6 +104,28 @@ existente com outro IP tem somente o IP atualizado, preservando nome e id. Se o
 IP também for igual, o arquivo não é reescrito. O cadastro ainda não implementa
 pareamento ou autenticação de dispositivos.
 
+`GET /peer` retorna `{ "peers": [...] }` com os registros do CSV (ou um array
+vazio quando não há cadastros). O acesso exige uma conexão da própria máquina
+e o cabeçalho `Origin` do Vite local: HTTP na porta `VITE_PORT`, usando `localhost`,
+loopback ou um IPv4 da máquina. Outras origens, conexões remotas e requisições
+sem `Origin` recebem `403`. O Vite usa a porta configurada e falha se ela estiver
+ocupada, em vez de escolher outra porta. O preview só terá acesso se usar essa mesma porta.
+Essa verificação restringe o acesso do navegador e da rede; não autentica
+processos locais, que podem imitar o cabeçalho `Origin`.
+
+Para configurar a porta, copie `.env.example` para `.env` na raiz e altere
+`VITE_PORT=5173`. Sem configuração, o padrão é 5173. Variáveis definidas no
+ambiente do processo têm prioridade sobre o `.env`. Reinicie a API e o Vite
+depois de alterar a porta.
+
+`model/Network.js` carrega e valida o mesmo valor para os processos Node.js pelo
+método privado `#exportVitePort()`, chamado no construtor. Controller e Model
+podem importar `network` desse arquivo e acessar `network.vitePort`, somente
+para leitura; após seu carregamento, o valor
+também está em `process.env.VITE_PORT`. O `view/vite.config.js` usa esse valor
+para iniciar o servidor e disponibiliza `import.meta.env.VITE_PORT` (string) aos
+módulos da View. A View não deve importar `Network.js`, pois ele depende de Node.js.
+
 Somente após a confirmação da gravação (`204`), a descoberta adiciona a URL à
 interface e ao `localStorage`. Respostas sem identidade são ignoradas; falhas na
 gravação interrompem a busca e chegam à interface como erro.
@@ -116,8 +138,7 @@ A API precisa estar em execução; o CORS já configurado permite a requisição
 da interface. O endereço fica definido na inicialização do Vite ou na build:
 ao trocar de rede, reinicie o servidor de desenvolvimento ou gere outra build.
 
-`npm test` verifica o Singleton, a persistência, as validações e as operações no
-CSV usando arquivos temporários, além das rotas HTTP e do fluxo de descoberta.
+`npm test` verifica a listagem HTTP e as restrições de acesso a `GET /peer`.
 
 ## CORS
 
@@ -125,6 +146,8 @@ A API usa o middleware `cors` em `controller/index.js` para permitir que página
 origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST` e
 `OPTIONS` e o cabeçalho `Content-Type`. O middleware responde automaticamente às
 consultas prévias do navegador (preflight) com status `204`.
+`GET /peer` aplica a restrição adicional descrita acima e só libera a origem
+local aceita; o CORS geral não concede acesso aos dados dessa rota.
 
 ## Upload
 

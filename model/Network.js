@@ -1,10 +1,32 @@
 import os from "node:os";
+import { fileURLToPath } from "node:url";
+import { config } from "dotenv";
 
 class Network {
   #cidrs = Object.freeze([]);
+  #vitePort;
 
   constructor() {
+    this.#exportVitePort();
     this.obtainCidrs();
+  }
+
+  #exportVitePort() {
+    // API e Vite leem o mesmo .env da raiz, independentemente da pasta atual.
+    config({
+      path: fileURLToPath(new URL("../.env", import.meta.url)),
+      quiet: true,
+    });
+    process.env.VITE_PORT ??= "5173";
+    const vitePort = Number(process.env.VITE_PORT);
+    if (!Number.isInteger(vitePort) || vitePort < 1 || vitePort > 65535) {
+      throw new Error("VITE_PORT deve ser uma porta inteira entre 1 e 65535.");
+    }
+    this.#vitePort = vitePort;
+  }
+
+  get vitePort() {
+    return this.#vitePort;
   }
 
   // O getter permite consultar a lista, sem substituir o atributo por fora da classe.

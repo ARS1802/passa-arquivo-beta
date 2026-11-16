@@ -1,6 +1,7 @@
 /*
  * Rotas da API:
  * GET / - retorna a identidade desta máquina.
+ * GET /peer - lista peers cadastrados, somente para o Vite local.
  * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
  * GET /files/download/:filename - retorna o arquivo em Base64.

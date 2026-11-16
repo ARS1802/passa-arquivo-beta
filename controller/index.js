@@ -1,5 +1,7 @@
 /*
  * Rotas da API:
+ * GET / - retorna a identidade desta máquina.
+ * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
  * GET /files/download/:filename - retorna o arquivo em Base64.
  * GET /files - lista os arquivos compartilhados.
@@ -12,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import downloadRoute from "./routes/download.js";
 import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
+import peersRoute from "./routes/peers.js";
 import network from "../model/Network.js";
 import Peer from "../model/Peer.js";
 
@@ -35,9 +38,12 @@ app.use(
   }),
 );
 app.get("/", (_request, response) => {
-  if (_request) console.log("Fui encontrado!");
-  return response.sendStatus(200);
+  response.set("Cache-Control", "no-store");
+  return response.sendFile(
+    fileURLToPath(new URL("../model/identity.json", import.meta.url)),
+  );
 });
+app.use("/peer", peersRoute(peer));
 app.get("/api", (_request, response) => {
   return response.sendFile(documentationPage);
 });
@@ -45,7 +51,7 @@ app.use("/files", uploadRoute(uploadDirectory));
 app.use("/files", downloadRoute(uploadDirectory));
 app.use("/files", listRoute(uploadDirectory));
 
-app.use((error, request, response) => {
+app.use((error, request, response, next) => {
   if (error.type === "entity.too.large") {
     return response
       .status(413)

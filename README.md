@@ -27,7 +27,7 @@ responsável somente por seus endpoints.
 `npm run build` gera a interface em `view/dist/`, e `npm run preview` serve essa
 versão compilada. `npm run lint` verifica o código da interface.
 A descoberta lê as sub-redes de `import.meta.env.LOCAL_NETWORK_CIDRS`, preenchido
-pelo `define` do Vite. Nenhum arquivo JSON ou rota adicional é necessário.
+pelo `define` do Vite. Essas informações de rede não exigem arquivo ou rota próprios.
 
 ## Informações de rede
 
@@ -63,7 +63,8 @@ classe. Os módulos de `controller/fetchers/` fazem as requisições e tratam su
 todas as chamadas a `new Peer()` no mesmo processo retornam a mesma instância,
 que representa a máquina atual. O nome inicial fica pendente de quem chamar o
 construtor; deve ter de 1 a 15 caracteres, sem espaços ou outros caracteres de
-espaçamento. Ainda não há uma tela ou inicialização automática na API para defini-lo.
+espaçamento. A API instancia `Peer` com o nome inicial definido em
+`controller/index.js`; ainda não há uma tela para defini-lo.
 
 ```js
 import Peer from "./model/Peer.js";
@@ -96,13 +97,27 @@ retorna `false`; quando a operação é realizada, retorna `true`. Erros de vali
 lançam exceções sem alterar o cadastro. Os caminhos são relativos ao módulo,
 independentemente da pasta em que o programa é executado.
 
-A descoberta da interface mantém URLs no `localStorage`; ela não cadastra peers
-automaticamente, pois uma URL não fornece nome e UUID. O antigo CSV de URLs e o
-middleware do Vite que o preenchia foram removidos. O cadastro no modelo ainda
-não implementa pareamento ou autenticação de dispositivos.
+A rota `GET /` retorna o conteúdo de `model/identity.json`, com nome, IP e id.
+A descoberta lê esse JSON e envia a identidade para `POST /peer` na API
+local. Essa rota chama `peer.savePeer(identity)`: um id novo é cadastrado; um id
+existente com outro IP tem somente o IP atualizado, preservando nome e id. Se o
+IP também for igual, o arquivo não é reescrito. O cadastro ainda não implementa
+pareamento ou autenticação de dispositivos.
+
+Somente após a confirmação da gravação (`204`), a descoberta adiciona a URL à
+interface e ao `localStorage`. Respostas sem identidade são ignoradas; falhas na
+gravação interrompem a busca e chegam à interface como erro.
+
+O navegador envia o cadastro diretamente ao endereço completo da API local,
+sem proxy. O Vite insere esse endereço em `import.meta.env.LOCAL_API_URL`, usando
+`HOST` e `PORT` quando definidos, ou o primeiro IPv4 local e a porta 3000.
+Quando `HOST` é `0.0.0.0`, usa o IPv4 local como destino do navegador.
+A API precisa estar em execução; o CORS já configurado permite a requisição
+da interface. O endereço fica definido na inicialização do Vite ou na build:
+ao trocar de rede, reinicie o servidor de desenvolvimento ou gere outra build.
 
 `npm test` verifica o Singleton, a persistência, as validações e as operações no
-CSV usando arquivos temporários.
+CSV usando arquivos temporários, além das rotas HTTP e do fluxo de descoberta.
 
 ## CORS
 

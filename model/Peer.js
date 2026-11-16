@@ -24,6 +24,9 @@ function validateId(id) {
 }
 
 function validatePeer(peer) {
+  if (!peer || typeof peer !== "object" || Array.isArray(peer)) {
+    throw new TypeError("Informe uma identidade com nome, ip e id.");
+  }
   validateNome(peer.nome);
   validateId(peer.id);
   if (typeof peer.ip !== "string" || !isIPv4(peer.ip)) {
@@ -151,6 +154,20 @@ export default class Peer {
       throw new Error("Já existe um peer com esse id.");
     }
     peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id });
+    this.#writePeers(peers);
+  }
+
+  /** Na descoberta, um id conhecido conserva seu nome e atualiza apenas o IP. */
+  savePeer(peer) {
+    validatePeer(peer);
+    const peers = this.getPeers();
+    const existing = peers.find((item) => item.id === peer.id);
+    if (existing) {
+      if (existing.ip === peer.ip) return;
+      existing.ip = peer.ip;
+    } else {
+      peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id });
+    }
     this.#writePeers(peers);
   }
 

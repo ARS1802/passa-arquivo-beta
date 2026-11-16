@@ -60,29 +60,51 @@ function* generateIps(ranges) {
   }
 }
 
-async function isApiAvailable(apiUrl, timeout, path) {
+async function getIdentity(apiUrl, timeout, path) {
   try {
     const response = await fetch(`${apiUrl}${path}`, {
       signal: AbortSignal.timeout(timeout),
       redirect: "manual",
     });
-    response.body?.cancel();
-    return response.status === 200;
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      return null;
+    }
+    const identity = await response.json();
+    if (!identity || typeof identity.nome !== "string" ||
+        typeof identity.id !== "string" || !isValidIpv4(identity.ip)) {
+      return null;
+    }
+    return identity;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+async function saveIdentity(identity, timeout) {
+  // O navegador entrega os dados à API local; somente Peer escreve no CSV.
+  const response = await fetch(`${import.meta.env.LOCAL_API_URL}/peer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(identity),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (response.status !== 204) {
+    await response.body?.cancel();
+    throw new Error("Peer encontrado, mas não foi possível salvar em peers.csv.");
   }
 }
 
 /**
- * Procura APIs que respondem 200 a GET em `path` (padrão "/") nas faixas
- * IPv4 de LOCAL_NETWORK_CIDRS. Sem sub-redes, retorna uma lista vazia.
+ * Procura identidades por GET em `path` (padrão "/") nas sub-redes locais
+ * e as salva na API local. Sem sub-redes, retorna uma lista vazia.
  * @param {object} [options]
  * @param {number} [options.port=3000]
  * @param {number} [options.concurrency=500]
  * @param {number} [options.timeout=1500]
  * @param {string} [options.path="/"] Caminho usado para verificar a API.
  * @param {(url: string) => void | Promise<void>} [options.onFound]
- *   Chamado uma vez por API encontrada. Se lançar erro, a busca é interrompida.
+ *   Chamado após salvar cada identidade. Erros de gravação interrompem a busca.
  * @returns {Promise<string[]>}
  */
 export async function discoverApis(options = {}) {
@@ -123,11 +145,13 @@ export async function discoverApis(options = {}) {
       if (done) return;
 
       const apiUrl = `http://${address}:${port}`;
-      if (!(await isApiAvailable(apiUrl, timeout, path))) continue;
+      const identity = await getIdentity(apiUrl, timeout, path);
+      if (!identity || stopped) continue;
       if (discoveredApis.has(apiUrl)) continue; // faixas sobrepostas
 
       discoveredApis.add(apiUrl);
       try {
+        await saveIdentity(identity, timeout);
         await onFound?.(apiUrl);
       } catch (error) {
         stopped = true; // evita que os outros workers continuem em segundo plano

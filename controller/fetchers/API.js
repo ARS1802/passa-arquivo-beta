@@ -101,14 +101,14 @@ class API {
 
   /**
    * Descobre APIs nas sub-redes de LOCAL_NETWORK_CIDRS que respondem 200 a
-   * GET em "/". Cada API encontrada é adicionada à lista de URLs da interface.
+   * GET em "/" com a identidade. Após salvar no CSV local, adiciona a URL à interface.
    *
    * @param {(url: string) => void} [onFound] - Notifica a interface após atualizar a lista.
    * @returns {Promise<string[]>} URLs encontradas nesta busca.
    */
   async discoverApis(onFound) {
     return scanNetwork({
-      path: "/", // só entra na lista quem responde 200 a GET /
+      path: "/",
       onFound: (apiUrl) => {
         if (!this.apiUrl.includes(apiUrl)) this.apiUrl.push(apiUrl);
         if (!this.apiUrl.includes(this.selectedApiUrl)) {

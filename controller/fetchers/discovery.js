@@ -1,6 +1,6 @@
 const DEFAULT_PORT = 3000;
 const DEFAULT_CONCURRENCY = 800;
-const DEFAULT_TIMEOUT = 2500;
+const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_PATH = "/";
 
 export function isValidIpv4(ip) {
@@ -60,10 +60,10 @@ function* generateIps(range) {
 
 async function getIdentity(apiUrl, timeout, path, signal) {
   try {
-    if (apiUrl.includes("192.168.18.46"))
-      console.log(`Tentando fetch em ${apiUrl}`);
     const response = await fetch(`${apiUrl}${path}`, {
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+        : AbortSignal.timeout(timeout),
       redirect: "manual",
     });
     if (response.status !== 200) {
@@ -91,7 +91,9 @@ async function saveIdentity(identity, timeout, signal) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(identity),
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+      : AbortSignal.timeout(timeout),
   });
   if (response.status !== 204) {
     await response.body?.cancel();

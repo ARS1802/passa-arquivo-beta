@@ -1,6 +1,7 @@
 /test/*
 !/test/api-fetchers.test.js
 !/test/peers-route.test.js
+!/test/dir-route.test.js
 /.env
 /node_modules
 AGENTS.md

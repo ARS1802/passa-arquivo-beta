@@ -4,9 +4,11 @@ import api from "../../../controller/fetchers/API.js";
 import DataView from "../components/DataView.jsx";
 import FileUploadButton from "../components/FileUploadButton.jsx";
 import ApiUrlPage from "./ApiUrlPage.jsx";
+import SelectDir from "./SelectDir.jsx";
 
 function FileListPage() {
   const [showApiUrlPage, setShowApiUrlPage] = useState(false);
+  const [showSelectDir, setShowSelectDir] = useState(true);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +26,10 @@ function FileListPage() {
     }
   }
 
+  if (showSelectDir) {
+    return <SelectDir onBack={() => setShowSelectDir(false)} />;
+  }
+
   if (showApiUrlPage) {
     return <ApiUrlPage onBack={() => setShowApiUrlPage(false)} />;
   }
@@ -36,6 +42,19 @@ function FileListPage() {
           {api.targetPeer ? `${api.targetPeer.nome} — ${api.targetPeerURL}` : "Selecione um Peer para acessar os arquivos."}
         </Card.Header>
         <Card.Body>
+          <Button
+            type="button"
+            variant="outline-secondary"
+            onClick={() => {
+              setFiles([]);
+              setError("");
+              setShowSelectDir(true);
+            }}
+            disabled={loading}
+            className="mb-3 me-2"
+          >
+            Diretório compartilhado
+          </Button>
           <Button
             type="button"
             variant="outline-secondary"

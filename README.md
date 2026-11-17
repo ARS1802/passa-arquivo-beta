@@ -8,11 +8,11 @@ Execute os comandos abaixo a partir da raiz do repositório:
 
 ```bash
 npm install
-npm run api
+npm start
 ```
 
-O script `npm run api` executa `controller/index.js` diretamente no Node.js, sem etapa de build,
-e usa o diretório de arquivos definido por `UPLOAD_DIR` no próprio script.
+O script `npm start` executa `controller/index.js` diretamente no Node.js, sem etapa de build.
+O diretório compartilhado é escolhido pela interface, sem um caminho fixo no script.
 Em outro terminal, inicie a interface:
 
 ```bash
@@ -28,6 +28,43 @@ responsável somente por seus endpoints.
 versão compilada. `npm run lint` verifica o código da interface.
 A descoberta lê as sub-redes de `import.meta.env.LOCAL_NETWORK_CIDRS`, preenchido
 pelo `define` do Vite. Essas informações de rede não exigem arquivo ou rota próprios.
+
+## Diretório compartilhado
+
+A interface abre a tela `SelectDir.jsx`. Clique em **Escolher diretório**, selecione
+uma pasta no diálogo nativo e aguarde a confirmação. O botão **Diretório compartilhado**
+na tela de arquivos permite trocar essa escolha depois.
+
+O seletor usa o **Zenity no Linux**, instalado no sistema, e a API deve estar rodando
+na sessão gráfica do usuário. O navegador não fornece o caminho absoluto de uma
+pasta: por isso, a GUI solicita o diálogo à API local e depois envia o caminho escolhido.
+Cancelar o diálogo mantém o compartilhamento anterior. Se o Zenity ou a sessão
+gráfica não estiver disponível, a interface mostra o erro.
+
+`model/Directory.js` concentra a consulta, validação e atualização de `SHARED_DIR`
+e a abertura do seletor nativo nos métodos estáticos `getSharedDir()`,
+`setSharedDir()` e `selectDirectory()`.
+
+Todas as rotas abaixo usam `network.requireLocalVite`, o mesmo middleware de
+consulta e exclusão de peers. A conexão e a origem devem pertencer ao Vite local,
+mesmo quando o Peer selecionado na interface é remoto.
+
+- `GET /dir`: retorna `{ "SHARED_DIR": "/caminho/da/pasta" }`, ou `null` no campo quando não configurado.
+- `POST /dir/picker`: abre o seletor e retorna o caminho escolhido, sem alterar o compartilhamento; cancelar retorna `204`.
+- `POST /dir`: recebe `{ "SHARED_DIR": "/caminho/da/pasta" }`. Confirma que o caminho é absoluto, existe e é um diretório. Somente então atualiza `process.env.SHARED_DIR` e retorna o caminho real.
+
+Um caminho inválido ou que aponta para um arquivo retorna `400`; uma pasta
+inexistente retorna `404`. Falhas preservam o diretório anterior. As rotas de
+listagem, upload e download leem o valor atualizado a cada requisição. Sem uma
+pasta configurada, retornam `409`, sem criar ou compartilhar uma pasta padrão.
+Também é possível fornecer `SHARED_DIR` no ambiente ao iniciar a API; esse caminho
+passa pela mesma validação.
+
+Após a confirmação, a classe `API` salva `SHARED_DIR` na mesma `LOCAL_STORAGE_KEY`
+dos peers. Ao abrir a tela, consulta a API: se ela reiniciou sem diretório, reenvia
+a escolha salva para validação. Se a pasta foi removida, a tela pede uma nova escolha
+por meio da mensagem de erro. O valor do ambiente pertence ao processo da API;
+a GUI consulta esse processo por HTTP, sem uma cópia estática em `import.meta.env`.
 
 ## Informações de rede
 
@@ -171,9 +208,12 @@ um filtro mais específico, como o id. `selectPeer()` exige um filtro e um regis
 existente. Consultas e exclusões sempre usam `/peer` da API local, independentemente
 do alvo dos fetchers de arquivos.
 
-`LOCAL_STORAGE_KEY` vale `passa-arquivo-peers`. Seu valor no navegador é um array
-de objetos, atualizado por id ao descobrir, selecionar ou salvar explicitamente
-um Peer. A API local continua sendo a fonte dos registros; o cache não escolhe o
+`LOCAL_STORAGE_KEY` vale `passa-arquivo-peers`. Seu valor no navegador é um objeto
+`{ "peers": [...], "SHARED_DIR": "/caminho/da/pasta" }`. O campo `SHARED_DIR` pode
+ser `null`. Caches antigos que continham somente um array de peers são migrados
+sem perder registros. A lista é atualizada por id ao descobrir, selecionar ou salvar
+explicitamente um Peer; alterações nessa lista preservam o diretório salvo.
+A API local continua sendo a fonte dos registros; o cache não escolhe o
 alvo ao recarregar a página. URLs do formato anterior não são usadas como identidades.
 Uma nova descoberta atualiza o IP do alvo se encontrar o mesmo id. Excluir o alvo
 limpa a seleção, sem escolher outro automaticamente.
@@ -181,8 +221,8 @@ limpa a seleção, sem escolher outro automaticamente.
 Peers remotos são objetos simples: a classe `model/Peer.js` continua exclusiva
 do Node.js e representa apenas a máquina local. A View não instancia essa classe.
 
-`npm test` verifica os fetchers, a descoberta com rede simulada, o cache, a seleção
-e as restrições HTTP de listagem e exclusão de Peers.
+`npm test` verifica os fetchers, a descoberta com rede simulada, o cache, a seleção,
+as restrições locais de peers e diretórios, e a troca de pasta nas operações de arquivos.
 
 ## CORS
 
@@ -190,8 +230,8 @@ A API usa o middleware `cors` em `controller/index.js` para permitir que página
 origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST`, `DELETE` e
 `OPTIONS` e o cabeçalho `Content-Type`. O middleware responde automaticamente às
 consultas prévias do navegador (preflight) com status `204`.
-`GET /peer` e `DELETE /peer/:id` aplicam a restrição adicional descrita acima e só liberam a origem
-local aceita; o CORS geral não concede acesso aos dados dessa rota.
+`GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
+descrita acima e só liberam a origem local aceita; o CORS geral não concede acesso a essas rotas.
 
 ## Upload
 

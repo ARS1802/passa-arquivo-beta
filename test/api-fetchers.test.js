@@ -119,10 +119,10 @@ test("localStorage guarda objetos por id, atualiza IP e remove somente o Peer pe
   await api.setPeerAtLocalStorage(second.id);
   records = [{ ...first, ip: "192.168.1.40" }, second];
   await api.setPeerAtLocalStorage(first.id);
-  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), records);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)).peers, records);
   await assert.rejects(api.setPeerAtLocalStorage("ausente"), /não encontrado/);
   api.removePeerAtLocalStorage(first.id);
-  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), [second]);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)).peers, [second]);
   assert.equal(api.targetPeer, null);
 });
 
@@ -148,14 +148,14 @@ test("deletePeer só limpa cache e alvo após confirmar a exclusão na API local
   await api.setPeerAtLocalStorage(second.id);
   await assert.rejects(api.deletePeer(first.id), /500/);
   assert.deepEqual(api.targetPeer, first);
-  assert.equal(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)).length, 2);
+  assert.equal(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)).peers.length, 2);
   status = 204;
   await api.deletePeer(second.id);
   assert.deepEqual(api.targetPeer, first);
   await api.deletePeer(first.id);
   assert.equal(api.targetPeer, null);
   assert.equal(api.targetPeerURL, "");
-  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), []);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)).peers, []);
 });
 
 test("descoberta paralela persiste identidades, ignora hosts inválidos e acompanha o id selecionado", async (t) => {
@@ -193,7 +193,7 @@ test("descoberta paralela persiste identidades, ignora hosts inválidos e acompa
   assert.ok(maxActive > 1);
   assert.deepEqual(savedIds.sort(), [first.id, second.id].sort());
   assert.deepEqual(found, records);
-  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), records);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)).peers, records);
   await api.selectPeer({ id: first.id });
   records[0].ip = "192.168.1.40";
   await api.selectPeer({ id: first.id });
@@ -234,4 +234,74 @@ test("cancelamento aborta consultas pendentes e não inicia a próxima faixa", a
   assert.equal(requests.length, 4);
   assert.deepEqual(await new API().discoverPeers({ signal: controller.signal }), []);
   assert.equal(requests.length, 4);
+});
+
+test("diretório usa sempre a API local e migra o cache sem perder peers", async (t) => {
+  const values = useStorage(t);
+  const api = new API();
+  values.set(api.LOCAL_STORAGE_KEY, JSON.stringify([first, second]));
+  api.targetPeer = second;
+  let sharedDir = null;
+  let rejectUpdate = false;
+  let cancelPicker = false;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (url === `${localUrl}/peer`) return Response.json({ peers: [first, second] });
+    if (url === `${localUrl}/dir/picker`) {
+      assert.equal(options.method, "POST");
+      return cancelPicker ? new Response(null, { status: 204 }) : Response.json({ SHARED_DIR: "/tmp/Pasta com espaços" });
+    }
+    assert.equal(url, `${localUrl}/dir`);
+    if (options) {
+      assert.equal(options.method, "POST");
+      assert.equal(options.headers["Content-Type"], "application/json");
+      if (rejectUpdate) return Response.json({ error: "Diretório não encontrado." }, { status: 404 });
+      sharedDir = JSON.parse(options.body).SHARED_DIR;
+    }
+    return Response.json({ SHARED_DIR: sharedDir });
+  });
+
+  const selected = await api.selectDirectory();
+  assert.equal(selected, "/tmp/Pasta com espaços");
+  assert.equal(api.sharedDir, null);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), [first, second]);
+  await api.setSharedDir(selected);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), { peers: [first, second], SHARED_DIR: selected });
+  assert.deepEqual(api.targetPeer, second);
+
+  rejectUpdate = true;
+  await assert.rejects(api.setSharedDir("/ausente"), /Diretório não encontrado/);
+  assert.equal(api.sharedDir, selected);
+  cancelPicker = true;
+  assert.equal(await api.selectDirectory(), null);
+  assert.equal(api.sharedDir, selected);
+
+  api.removePeerAtLocalStorage(first.id);
+  await api.setPeerAtLocalStorage(second.id);
+  assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), { peers: [second], SHARED_DIR: selected });
+  rejectUpdate = false;
+  sharedDir = null; // Simula o reinício do processo da API.
+  assert.equal(await new API().getSharedDir(), selected);
+  assert.equal(sharedDir, selected);
+});
+
+test("diretório rejeita respostas inválidas e não restaura cache se o acesso local for negado", async (t) => {
+  const values = useStorage(t);
+  const api = new API();
+  const stored = { peers: [first], SHARED_DIR: "/tmp/antes" };
+  values.set(api.LOCAL_STORAGE_KEY, JSON.stringify(stored));
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++;
+    return Response.json({ error: "Acesso permitido apenas ao Vite local." }, { status: 403 });
+  });
+  await assert.rejects(api.getSharedDir(), /Vite local/);
+  assert.equal(requests, 1);
+  for (const result of [{}, { SHARED_DIR: 12 }, { SHARED_DIR: "" }, { SHARED_DIR: null }]) {
+    t.mock.method(globalThis, "fetch", async () => Response.json(result));
+    await assert.rejects(api.setSharedDir("/tmp/depois"), /diretório/);
+    assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), stored);
+  }
+  setGlobal(t, "localStorage", undefined);
+  t.mock.method(globalThis, "fetch", async () => Response.json({ SHARED_DIR: "/tmp/depois" }));
+  assert.equal(await api.setSharedDir("/tmp/depois"), "/tmp/depois");
 });

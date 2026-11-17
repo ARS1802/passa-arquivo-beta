@@ -10,18 +10,20 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
 import File from "../../model/File.js";
+import Directory from "../../model/Directory.js";
 
-export default function listRoute(uploadDirectory) {
+export default function listRoute() {
   const router = Router();
 
   router.get("/", async (_request, response, next) => {
     try {
-      const entries = await readdir(uploadDirectory, { withFileTypes: true });
+      const sharedDirectory = Directory.getSharedDir();
+      const entries = await readdir(sharedDirectory, { withFileTypes: true });
       const files = await Promise.all(
         entries
           .filter((entry) => entry.isFile())
           .map(async (entry) => {
-            const filePath = path.join(uploadDirectory, entry.name);
+            const filePath = path.join(sharedDirectory, entry.name);
             const [data, metadata] = await Promise.all([
               readFile(filePath),
               stat(filePath),

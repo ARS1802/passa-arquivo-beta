@@ -7,8 +7,9 @@ import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
 import File from "../../model/File.js";
+import Directory from "../../model/Directory.js";
 
-export default function uploadRoute(uploadDirectory) {
+export default function uploadRoute() {
   const router = Router();
 
   router.post("/upload", async (request, response, next) => {
@@ -32,9 +33,9 @@ export default function uploadRoute(uploadDirectory) {
         .json({ error: "Arquivo excede o limite de 100 MB." });
     }
 
-    const destination = path.join(uploadDirectory, filename);
-
+    let destination;
     try {
+      destination = path.join(Directory.getSharedDir(), filename);
       await writeFile(destination, file.data, { flag: "wx" });
       return response.status(201).json({
         filename: file.filename,
@@ -47,7 +48,7 @@ export default function uploadRoute(uploadDirectory) {
         return response.status(409).json({ error: "O arquivo já existe." });
       }
 
-      await unlink(destination).catch(() => {});
+      if (destination) await unlink(destination).catch(() => {});
       return next(error);
     }
   });

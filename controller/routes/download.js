@@ -7,8 +7,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
 import File from "../../model/File.js";
+import Directory from "../../model/Directory.js";
 
-export default function downloadRoute(uploadDirectory) {
+export default function downloadRoute() {
   const router = Router();
 
   router.get("/download/:filename", async (request, response, next) => {
@@ -18,9 +19,8 @@ export default function downloadRoute(uploadDirectory) {
       return response.status(400).json({ error: "Nome de arquivo inválido." });
     }
 
-    const filePath = path.join(uploadDirectory, filename);
-
     try {
+      const filePath = path.join(Directory.getSharedDir(), filename);
       const file = new File(filename, await readFile(filePath));
       return response.json({
         filename: file.filename,

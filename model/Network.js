@@ -39,6 +39,25 @@ class Network {
     return this.#cidrs.map((cidr) => cidr.split("/")[0]);
   }
 
+  // Arrow function mantém o acesso a this quando o Express chama o middleware.
+  requireLocalVite = (request, response, next) => {
+    const localIps = ["127.0.0.1", "::1", ...this.getIps()];
+    const origins = ["localhost", ...localIps].map(
+      (host) => `http://${host === "::1" ? "[::1]" : host}:${this.vitePort}`,
+    );
+    // Usa a conexão real; cabeçalhos como X-Forwarded-For podem ser falsificados.
+    const address = request.socket.remoteAddress?.replace(/^::ffff:/, "");
+    const origin = request.get("Origin");
+    response.set("Cache-Control", "no-store");
+    response.vary("Origin");
+    response.removeHeader("Access-Control-Allow-Origin");
+    if (!localIps.includes(address) || !origins.includes(origin)) {
+      return response.status(403).json({ error: "Acesso permitido apenas ao Vite local." });
+    }
+    response.set("Access-Control-Allow-Origin", origin);
+    return next();
+  };
+
   /** Atualiza as sub-redes IPv4 locais, ignorando interfaces internas. */
   obtainCidrs() {
     const cidrs = Object.values(os.networkInterfaces())

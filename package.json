@@ -7,7 +7,7 @@
   "type": "module",
   "main": "controller/index.js",
   "scripts": {
-    "start": "export UPLOAD_DIR='/home/arthur/Imagens/Background Desktop' ; node controller/index.js",
+    "start": "node controller/index.js",
     "test": "node --test",
     "dev": "cd view && vite",
     "build": "cd view && vite build",

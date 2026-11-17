@@ -2,6 +2,7 @@ import { downloadFile } from "./download.js";
 import { discoverPeers as scanNetwork, isValidIpv4 } from "./discovery.js";
 import { listFiles } from "./list.js";
 import { uploadFile } from "./upload.js";
+import { getSharedDir, selectDirectory, setSharedDir } from "./dir.js";
 
 // O cadastro pertence à máquina local, mesmo quando outro Peer está selecionado.
 const LOCAL_API_URL = import.meta.env.LOCAL_API_URL;
@@ -28,28 +29,57 @@ export class API {
     return this.targetPeerURL;
   }
 
-  #readStoredPeers() {
-    if (typeof localStorage === "undefined") return [];
+  #readStorage() {
+    const empty = { peers: [], SHARED_DIR: null };
+    if (typeof localStorage === "undefined") return empty;
     try {
-      const peers = JSON.parse(localStorage.getItem(this.LOCAL_STORAGE_KEY) || "[]");
-      return Array.isArray(peers) ? peers.filter(isPeer) : [];
+      const stored = JSON.parse(localStorage.getItem(this.LOCAL_STORAGE_KEY) || "null");
+      // Preserva os peers de instalações que ainda guardam somente um array.
+      if (Array.isArray(stored)) return { ...empty, peers: stored.filter(isPeer) };
+      return {
+        peers: Array.isArray(stored?.peers) ? stored.peers.filter(isPeer) : [],
+        SHARED_DIR: typeof stored?.SHARED_DIR === "string" && stored.SHARED_DIR.trim()
+          ? stored.SHARED_DIR : null,
+      };
     } catch {
       // Um cache inválido não deve impedir a consulta ao cadastro da API local.
-      return [];
+      return empty;
     }
   }
 
-  #storePeers(peers) {
+  #store(changes) {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(peers));
+      localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify({ ...this.#readStorage(), ...changes }));
     }
   }
 
   #cachePeers(peers) {
     // O id permanece o mesmo quando o dispositivo troca de endereço IPv4.
-    const stored = new Map(this.#readStoredPeers().map((peer) => [peer.id, peer]));
+    const stored = new Map(this.#readStorage().peers.map((peer) => [peer.id, peer]));
     for (const peer of peers) stored.set(peer.id, peer);
-    this.#storePeers([...stored.values()]);
+    this.#store({ peers: [...stored.values()] });
+  }
+
+  get sharedDir() {
+    return this.#readStorage().SHARED_DIR;
+  }
+
+  async getSharedDir() {
+    const directory = await getSharedDir(LOCAL_API_URL);
+    // Após reiniciar a API, a pasta salva passa novamente pela validação no Model.
+    if (!directory && this.sharedDir) return this.setSharedDir(this.sharedDir);
+    this.#store({ SHARED_DIR: directory });
+    return directory;
+  }
+
+  selectDirectory() {
+    return selectDirectory(LOCAL_API_URL);
+  }
+
+  async setSharedDir(directory) {
+    const sharedDir = await setSharedDir(LOCAL_API_URL, directory);
+    this.#store({ SHARED_DIR: sharedDir });
+    return sharedDir;
   }
 
   /** Descobre e salva Peers em paralelo, sem escolher um alvo pelo usuário. */
@@ -113,7 +143,7 @@ export class API {
   }
 
   removePeerAtLocalStorage(id) {
-    this.#storePeers(this.#readStoredPeers().filter((peer) => peer.id !== id));
+    this.#store({ peers: this.#readStorage().peers.filter((peer) => peer.id !== id) });
   }
 
   async deletePeer(id) {

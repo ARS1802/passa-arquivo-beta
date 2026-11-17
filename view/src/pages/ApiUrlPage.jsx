@@ -5,7 +5,7 @@ function ApiUrlPage({ onBack }) {
   return (
     <Container className="py-4">
       <Card>
-        <Card.Header as="h4">Configurar API</Card.Header>
+        <Card.Header as="h4">Peers salvos</Card.Header>
         <Card.Body>
           <ApiUrlConfig />
           <Button type="button" variant="secondary" onClick={onBack}>

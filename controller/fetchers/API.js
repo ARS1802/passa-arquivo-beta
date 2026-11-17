@@ -1,137 +1,143 @@
 import { downloadFile } from "./download.js";
-import { discoverApis as scanNetwork } from "./discovery.js";
+import { discoverPeers as scanNetwork, isValidIpv4 } from "./discovery.js";
 import { listFiles } from "./list.js";
 import { uploadFile } from "./upload.js";
 
-const STORAGE_KEY = "passa-arquivo-api-urls";
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+// O cadastro pertence à máquina local, mesmo quando outro Peer está selecionado.
+const LOCAL_API_URL = import.meta.env.LOCAL_API_URL;
 
-class API {
+function isPeer(peer) {
+  return peer && typeof peer === "object" && !Array.isArray(peer) &&
+    typeof peer.nome === "string" && peer.nome.trim() &&
+    typeof peer.id === "string" && peer.id.trim() && isValidIpv4(peer.ip);
+}
+
+export class API {
   constructor() {
-    this.apiUrl = this.readStoredApiUrls();
-    this.selectedApiUrl = this.apiUrl[0];
+    this.targetPeer = null;
+    this.LOCAL_STORAGE_KEY = "passa-arquivo-peers";
   }
 
-  readStoredApiUrls() {
-    if (typeof localStorage === "undefined") {
-      return [DEFAULT_API_URL];
-    }
+  // A URL acompanha o IP atual do alvo, sem manter uma segunda cópia do estado.
+  get targetPeerURL() {
+    return this.targetPeer ? `http://${this.targetPeer.ip}:3000` : "";
+  }
 
-    const storedValue = localStorage.getItem(STORAGE_KEY);
+  #getTargetPeerURL() {
+    if (!this.targetPeer) throw new Error("Selecione um Peer antes de acessar arquivos.");
+    return this.targetPeerURL;
+  }
 
-    if (!storedValue) {
-      return [DEFAULT_API_URL];
-    }
-
+  #readStoredPeers() {
+    if (typeof localStorage === "undefined") return [];
     try {
-      const urls = JSON.parse(storedValue);
-      const validUrls = Array.isArray(urls)
-        ? urls.filter((url) => typeof url === "string" && url)
-        : [];
-
-      return validUrls.length > 0 ? validUrls : [DEFAULT_API_URL];
+      const peers = JSON.parse(localStorage.getItem(this.LOCAL_STORAGE_KEY) || "[]");
+      return Array.isArray(peers) ? peers.filter(isPeer) : [];
     } catch {
-      return [storedValue];
+      // Um cache inválido não deve impedir a consulta ao cadastro da API local.
+      return [];
     }
   }
 
-  getSelectedApiUrl() {
-    return this.selectedApiUrl;
-  }
-
-  async isHealthy(apiUrl) {
-    if (typeof apiUrl !== "string" || !apiUrl.trim()) {
-      return false;
-    }
-
-    try {
-      await fetch(`${apiUrl.trim().replace(/\/+$/, "")}/`);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  setApiUrl(value) {
-    if (typeof value !== "string") {
-      throw new Error("Informe uma URL válida para a API.");
-    }
-
-    const apiUrl = value.trim().replace(/\/+$/, "");
-
-    if (!apiUrl) {
-      throw new Error("Informe uma URL válida para a API.");
-    }
-
-    if (!this.apiUrl.includes(apiUrl)) {
-      this.apiUrl = [...this.apiUrl, apiUrl];
-    }
-    this.selectedApiUrl = apiUrl;
-
+  #storePeers(peers) {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
+      localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(peers));
     }
-
-    return apiUrl;
   }
 
-  selectApiUrl(apiUrl) {
-    if (!this.apiUrl.includes(apiUrl)) {
-      throw new Error("A URL selecionada não está configurada.");
-    }
-
-    this.selectedApiUrl = apiUrl;
-    return apiUrl;
+  #cachePeers(peers) {
+    // O id permanece o mesmo quando o dispositivo troca de endereço IPv4.
+    const stored = new Map(this.#readStoredPeers().map((peer) => [peer.id, peer]));
+    for (const peer of peers) stored.set(peer.id, peer);
+    this.#storePeers([...stored.values()]);
   }
 
-  removeApiUrl(apiUrl) {
-    if (!this.apiUrl.includes(apiUrl)) {
-      throw new Error("A URL selecionada não está configurada.");
-    }
+  /** Descobre e salva Peers em paralelo, sem escolher um alvo pelo usuário. */
+  async discoverPeers({ signal } = {}) {
+    const discovered = await scanNetwork({ signal });
+    if (discovered.length === 0) return [];
 
-    this.apiUrl = this.apiUrl.filter((url) => url !== apiUrl);
-    this.selectedApiUrl = this.apiUrl[0];
-
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
-    }
-
-    return this.selectedApiUrl;
+    // O cadastro preserva o nome de ids conhecidos; usamos sua versão salva.
+    const ids = new Set(discovered.map((peer) => peer.id));
+    const peers = (await this.getPeer()).filter((peer) => ids.has(peer.id));
+    this.#cachePeers(peers);
+    const current = peers.find((peer) => peer.id === this.targetPeer?.id);
+    if (current) this.targetPeer = current;
+    return peers;
   }
 
-  /**
-   * Descobre APIs nas sub-redes de LOCAL_NETWORK_CIDRS que respondem 200 a
-   * GET em "/" com a identidade. Após salvar no CSV local, adiciona a URL à interface.
-   *
-   * @param {(url: string) => void} [onFound] - Notifica a interface após atualizar a lista.
-   * @returns {Promise<string[]>} URLs encontradas nesta busca.
-   */
-  async discoverApis(onFound) {
-    return scanNetwork({
-      path: "/",
-      onFound: (apiUrl) => {
-        if (!this.apiUrl.includes(apiUrl)) this.apiUrl.push(apiUrl);
-        if (!this.apiUrl.includes(this.selectedApiUrl)) {
-          this.selectedApiUrl = this.apiUrl[0];
-        }
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(this.apiUrl));
-        }
-        onFound?.(apiUrl);
-      },
+  /** Seleciona um único registro salvo. Nomes/IPs ambíguos exigem o id. */
+  async selectPeer(criteria) {
+    if (!criteria || Object.keys(criteria).length === 0) {
+      throw new TypeError("Informe nome, ip ou id para selecionar um Peer.");
+    }
+    const peer = await this.getPeer(criteria);
+    if (!peer) throw new Error("Peer não encontrado.");
+    this.#cachePeers([peer]);
+    this.targetPeer = peer;
+    return peer;
+  }
+
+  /** Sem filtro (ou com {}), retorna todos; com filtro, retorna um Peer ou null. */
+  async getPeer(criteria = {}) {
+    if (!criteria || typeof criteria !== "object" || Array.isArray(criteria)) {
+      throw new TypeError("Informe um objeto com nome, ip ou id.");
+    }
+    const entries = Object.entries(criteria);
+    if (entries.some(([key, value]) =>
+      !["nome", "ip", "id"].includes(key) || typeof value !== "string" || !value.trim()
+    )) {
+      throw new TypeError("Use nome, ip ou id com valores de texto não vazios.");
+    }
+
+    const response = await fetch(`${LOCAL_API_URL}/peer`);
+    if (!response.ok) throw new Error(`Não foi possível obter os Peers (${response.status}).`);
+    const result = await response.json();
+    if (!result || !Array.isArray(result.peers) || !result.peers.every(isPeer)) {
+      throw new Error("A resposta da API não contém uma lista de Peers válida.");
+    }
+    if (entries.length === 0) return result.peers;
+
+    const matches = result.peers.filter((peer) =>
+      entries.every(([key, value]) => peer[key] === value),
+    );
+    if (matches.length > 1) throw new Error("Mais de um Peer corresponde ao filtro. Informe o id.");
+    return matches[0] ?? null;
+  }
+
+  async setPeerAtLocalStorage(id) {
+    const peer = await this.getPeer({ id });
+    if (!peer) throw new Error("Peer não encontrado.");
+    this.#cachePeers([peer]);
+    return peer;
+  }
+
+  removePeerAtLocalStorage(id) {
+    this.#storePeers(this.#readStoredPeers().filter((peer) => peer.id !== id));
+  }
+
+  async deletePeer(id) {
+    if (typeof id !== "string" || !id.trim()) throw new TypeError("Informe o id do Peer.");
+    const response = await fetch(`${LOCAL_API_URL}/peer/${encodeURIComponent(id)}`, {
+      method: "DELETE",
     });
+    if (response.status !== 204) {
+      throw new Error(`Não foi possível excluir o Peer (${response.status}).`);
+    }
+    if (this.targetPeer?.id === id) this.targetPeer = null;
+    this.removePeerAtLocalStorage(id);
   }
 
   listFiles(...parameters) {
-    return listFiles(this.getSelectedApiUrl(), ...parameters);
+    return listFiles(this.#getTargetPeerURL(), ...parameters);
   }
 
   downloadFile(...parameters) {
-    return downloadFile(this.getSelectedApiUrl(), ...parameters);
+    return downloadFile(this.#getTargetPeerURL(), ...parameters);
   }
 
   uploadFile(...parameters) {
-    return uploadFile(this.getSelectedApiUrl(), ...parameters);
+    return uploadFile(this.#getTargetPeerURL(), ...parameters);
   }
 }
 

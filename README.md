@@ -40,7 +40,7 @@ alterações externas. A instância obtém os CIDRs antes de ser exportada.
 A classe consulta a rede; a configuração do Vite insere uma cópia dos CIDRs no
 código da interface. O navegador não importa a classe, que depende de Node.js.
 A descoberta pesquisa exclusivamente essas sub-redes. Se a lista estiver vazia,
-retorna uma lista vazia de APIs, sem fazer requisições de descoberta. Não há
+retorna uma lista vazia de Peers, sem fazer requisições de descoberta. Não há
 detecção por WebRTC, faixas predefinidas ou parâmetro para fornecer outras faixas.
 
 Os valores representam a rede da máquina que executou o Vite. Ao trocar de rede,
@@ -113,6 +113,10 @@ ocupada, em vez de escolher outra porta. O preview só terá acesso se usar essa
 Essa verificação restringe o acesso do navegador e da rede; não autentica
 processos locais, que podem imitar o cabeçalho `Origin`.
 
+`DELETE /peer/:id` aplica a mesma restrição de conexão e origem local. Chama
+`peer.removePeer(id)` e retorna `204` quando exclui o registro, `404` quando o
+id não existe e `400` para um id inválido.
+
 Para configurar a porta, copie `.env.example` para `.env` na raiz e altere
 `VITE_PORT=5173`. Sem configuração, o padrão é 5173. Variáveis definidas no
 ambiente do processo têm prioridade sobre o `.env`. Reinicie a API e o Vite
@@ -126,9 +130,12 @@ também está em `process.env.VITE_PORT`. O `view/vite.config.js` usa esse valor
 para iniciar o servidor e disponibiliza `import.meta.env.VITE_PORT` (string) aos
 módulos da View. A View não deve importar `Network.js`, pois ele depende de Node.js.
 
-Somente após a confirmação da gravação (`204`), a descoberta adiciona a URL à
-interface e ao `localStorage`. Respostas sem identidade são ignoradas; falhas na
-gravação interrompem a busca e chegam à interface como erro.
+A descoberta consulta os endereços em paralelo com `Promise.all()`, mantendo o
+limite de 500 requisições simultâneas e timeout de 1500 ms por requisição.
+Depois da gravação (`204`), retorna objetos com `nome`, `ip` e `id`, sem duplicar
+o mesmo dispositivo por id. Ao terminar a busca, a classe `API` consulta os
+registros salvos e atualiza o cache no `localStorage`. Respostas sem identidade
+são ignoradas; falhas na gravação interrompem a busca e chegam à interface como erro.
 
 O navegador envia o cadastro diretamente ao endereço completo da API local,
 sem proxy. O Vite insere esse endereço em `import.meta.env.LOCAL_API_URL`, usando
@@ -138,15 +145,52 @@ A API precisa estar em execução; o CORS já configurado permite a requisição
 da interface. O endereço fica definido na inicialização do Vite ou na build:
 ao trocar de rede, reinicie o servidor de desenvolvimento ou gere outra build.
 
-`npm test` verifica a listagem HTTP e as restrições de acesso a `GET /peer`.
+## Seleção do Peer na interface
+
+`controller/fetchers/API.js` exporta a instância `api`, usada pela View, e a classe
+`API`. O atributo `targetPeer` começa como `null`: o usuário escolhe um dispositivo
+salvo na tela de Peers. `targetPeerURL` é calculado como `http://<ip>:3000`, ou uma
+string vazia enquanto não há alvo. Listagem, download e upload continuam usando
+os mesmos fetchers, agora com essa URL; sem alvo, informam que é preciso selecionar
+um Peer antes de acessar arquivos.
+
+```js
+const discovered = await api.discoverPeers(); // Descobre e salva, sem selecionar.
+const saved = await api.getPeer(); // Array de todos os Peers cadastrados na API local.
+const peer = await api.getPeer({ nome: "OutroPC" }); // Objeto ou null.
+await api.selectPeer({ id: peer.id }); // Seleciona somente esse dispositivo.
+const files = await api.listFiles();
+await api.setPeerAtLocalStorage(peer.id);
+api.removePeerAtLocalStorage(peer.id); // Remove somente a cópia no navegador.
+await api.deletePeer(peer.id); // Exclui do cadastro local e do cache.
+```
+
+`getPeer({})` também lista todos. Filtros aceitam `nome`, `ip` e/ou `id`; todos os
+campos fornecidos devem coincidir. Se houver mais de um resultado, o método pede
+um filtro mais específico, como o id. `selectPeer()` exige um filtro e um registro
+existente. Consultas e exclusões sempre usam `/peer` da API local, independentemente
+do alvo dos fetchers de arquivos.
+
+`LOCAL_STORAGE_KEY` vale `passa-arquivo-peers`. Seu valor no navegador é um array
+de objetos, atualizado por id ao descobrir, selecionar ou salvar explicitamente
+um Peer. A API local continua sendo a fonte dos registros; o cache não escolhe o
+alvo ao recarregar a página. URLs do formato anterior não são usadas como identidades.
+Uma nova descoberta atualiza o IP do alvo se encontrar o mesmo id. Excluir o alvo
+limpa a seleção, sem escolher outro automaticamente.
+
+Peers remotos são objetos simples: a classe `model/Peer.js` continua exclusiva
+do Node.js e representa apenas a máquina local. A View não instancia essa classe.
+
+`npm test` verifica os fetchers, a descoberta com rede simulada, o cache, a seleção
+e as restrições HTTP de listagem e exclusão de Peers.
 
 ## CORS
 
 A API usa o middleware `cors` em `controller/index.js` para permitir que páginas de qualquer
-origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST` e
+origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST`, `DELETE` e
 `OPTIONS` e o cabeçalho `Content-Type`. O middleware responde automaticamente às
 consultas prévias do navegador (preflight) com status `204`.
-`GET /peer` aplica a restrição adicional descrita acima e só libera a origem
+`GET /peer` e `DELETE /peer/:id` aplicam a restrição adicional descrita acima e só liberam a origem
 local aceita; o CORS geral não concede acesso aos dados dessa rota.
 
 ## Upload

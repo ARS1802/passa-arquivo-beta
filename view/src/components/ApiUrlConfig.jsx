@@ -1,165 +1,147 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Form, InputGroup } from "react-bootstrap";
 import api from "../../../controller/fetchers/API.js";
 
 function ApiUrlConfig() {
-  const [value, setValue] = useState("");
-  const [selectedApiUrl, setSelectedApiUrl] = useState(() =>
-    api.getSelectedApiUrl(),
-  );
+  const discoveryController = useRef(null);
+  useEffect(() => () => discoveryController.current?.abort(), []);
+
+  const [peers, setPeers] = useState([]);
+  const [selectedId, setSelectedId] = useState(api.targetPeer?.id || "");
   const [feedback, setFeedback] = useState("");
   const [feedbackVariant, setFeedbackVariant] = useState("danger");
-  const [checking, setChecking] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [discovering, setDiscovering] = useState(false);
 
-  function handleSubmit(event) {
-    event.preventDefault();
-    setFeedback("");
-    setFeedbackVariant("danger");
+  useEffect(() => {
+    if (!discovering) return;
+    let active = true;
+    let timer;
 
-    try {
-      api.setApiUrl(value);
-      setSelectedApiUrl(api.getSelectedApiUrl());
-      setValue("");
-      setFeedback("URL da API salva.");
-      setFeedbackVariant("success");
-    } catch (error) {
-      setFeedback(error.message);
-    }
-  }
-
-  function handleApiUrlChange(event) {
-    const nextUrl = api.selectApiUrl(event.target.value);
-    setFeedback("");
-    setFeedbackVariant("danger");
-    setSelectedApiUrl(nextUrl);
-  }
-
-  function handleRemoveApiUrl() {
-    try {
-      const nextUrl = api.removeApiUrl(selectedApiUrl);
-      setSelectedApiUrl(nextUrl || "");
-      setFeedback("URL da API removida.");
-      setFeedbackVariant("success");
-    } catch (error) {
-      setFeedback(error.message);
-      setFeedbackVariant("danger");
-    }
-  }
-
-  async function handleHealthCheck() {
-    setFeedback("");
-    setChecking(true);
-
-    try {
-      const healthy = await api.isHealthy(selectedApiUrl);
-      setFeedbackVariant(healthy ? "success" : "danger");
-      setFeedback(
-        healthy
-          ? "A URL da API está disponível."
-          : "A URL da API não está disponível.",
-      );
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  /** Atualiza as URLs exibidas a cada descoberta e mostra o resultado da busca. */
-  async function handleDiscovery() {
-    setFeedback("");
-    setDiscovering(true);
-
-    try {
-      let foundCount = 0;
-      const discoveredUrls = await api.discoverApis(() => {
-        setSelectedApiUrl(api.getSelectedApiUrl());
-        setFeedbackVariant("success");
-        setFeedback(
-          `${++foundCount} URL(s) encontrada(s). Busca em andamento...`,
-        );
-      });
-      setSelectedApiUrl(api.getSelectedApiUrl());
-      setFeedbackVariant("success");
-      setFeedback(
-        discoveredUrls.length > 0
-          ? `${discoveredUrls.length} URL(s) encontrada(s) na rede.`
-          : "Nenhuma API disponível foi encontrada na rede.",
-      );
-      if (discoveredUrls.length === 0) {
-        setFeedbackVariant("warning");
+    async function refreshPeers() {
+      try {
+        const saved = await api.getPeer();
+        if (active) setPeers(saved);
+      } catch (error) {
+        if (active) {
+          setFeedbackVariant("danger");
+          setFeedback(error.message);
+        }
+      } finally {
+        // Aguarda a consulta terminar para não acumular requisições lentas.
+        if (active) timer = setTimeout(refreshPeers, 1000);
       }
+    }
+
+    refreshPeers();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [discovering]);
+
+  useEffect(() => {
+    let active = true;
+    api.getPeer()
+      .then((saved) => { if (active) setPeers(saved); })
+      .catch((error) => { if (active) setFeedback(error.message); })
+      .finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function handleSelect(id) {
+    setBusy(true);
+    setFeedback("");
+    try {
+      const peer = await api.selectPeer({ id });
+      setSelectedId(peer.id);
     } catch (error) {
-      setFeedback(error.message);
       setFeedbackVariant("danger");
+      setFeedback(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(id) {
+    setBusy(true);
+    setFeedback("");
+    try {
+      await api.deletePeer(id);
+      setPeers((saved) => saved.filter((peer) => peer.id !== id));
+      setSelectedId(api.targetPeer?.id || "");
+      setFeedbackVariant("success");
+      setFeedback("Peer excluído.");
+    } catch (error) {
+      setFeedbackVariant("danger");
+      setFeedback(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDiscovery() {
+    const controller = new AbortController();
+    discoveryController.current = controller;
+    setBusy(true);
+    setDiscovering(true);
+    setFeedback("");
+    try {
+      const found = await api.discoverPeers({ signal: controller.signal });
+      setDiscovering(false);
+      setPeers(await api.getPeer());
+      setFeedbackVariant(controller.signal.aborted ? "info" : found.length ? "success" : "warning");
+      setFeedback(controller.signal.aborted
+        ? "Busca interrompida. Os Peers já salvos foram preservados."
+        : found.length
+        ? `${found.length} Peer(s) encontrado(s) na rede. Selecione o dispositivo desejado.`
+        : "Nenhum Peer disponível foi encontrado na rede.");
+    } catch (error) {
+      setFeedbackVariant("danger");
+      setFeedback(error.message);
     } finally {
       setDiscovering(false);
+      setBusy(false);
     }
   }
 
   return (
-    <Form onSubmit={handleSubmit} className="mb-4">
-      <Form.Label htmlFor="api-url">Adicionar URL da API</Form.Label>
-      <InputGroup>
-        <Form.Control
-          id="api-url"
-          type="url"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="http://api.exemplo.com:3000"
-          required
-        />
-        <Button type="submit">Salvar</Button>
-      </InputGroup>
-      <fieldset className="mt-2">
-        <legend className="fs-6">URL da API selecionada</legend>
-        {api.apiUrl.map((apiUrl) => (
-          <InputGroup key={apiUrl} className="mb-2">
+    <div className="mb-4">
+      <fieldset disabled={busy}>
+        <legend className="fs-6">Dispositivo para compartilhar arquivos</legend>
+        {!busy && peers.length === 0 && <p>Nenhum Peer salvo. Procure dispositivos na rede.</p>}
+        {peers.map((peer) => (
+          <InputGroup key={peer.id} className="mb-2">
             <Form.Check
-              id={`api-url-${apiUrl}`}
+              id={`peer-${peer.id}`}
               type="radio"
-              name="api-url"
-              label={apiUrl}
-              value={apiUrl}
-              checked={selectedApiUrl === apiUrl}
-              onChange={handleApiUrlChange}
+              name="target-peer"
+              label={`${peer.nome} (${peer.ip})`}
+              checked={selectedId === peer.id}
+              onChange={() => handleSelect(peer.id)}
               className="flex-grow-1"
             />
             <Button
               type="button"
               variant="danger"
-              onClick={handleRemoveApiUrl}
-              disabled={selectedApiUrl !== apiUrl}
-              aria-label={`Apagar ${apiUrl}`}
+              onClick={() => handleRemove(peer.id)}
+              aria-label={`Excluir ${peer.nome}`}
             >
-              Apagar
+              Excluir
             </Button>
           </InputGroup>
         ))}
+        <Button type="button" variant="outline-secondary" onClick={handleDiscovery} className="mt-2">
+          {busy ? "Aguarde..." : "Procurar Peers na rede"}
+        </Button>
       </fieldset>
-      <Button
-        type="button"
-        variant="outline-primary"
-        onClick={handleHealthCheck}
-        disabled={checking}
-        className="mt-2"
-      >
-        {checking ? "Testando..." : "Testar URL selecionada"}
-      </Button>
-      <Button
-        type="button"
-        variant="outline-secondary"
-        onClick={handleDiscovery}
-        disabled={discovering}
-        className="mt-2 ms-2"
-      >
-        {discovering ? "Procurando..." : "Procurar APIs na rede"}
-      </Button>
-      {feedback && (
-        <Alert variant={feedbackVariant} className="mt-2 mb-0">
-          {feedback}
-        </Alert>
+      {discovering && (
+        <Button type="button" variant="outline-danger" className="mt-2" onClick={() => discoveryController.current?.abort()}>
+          Interromper busca
+        </Button>
       )}
-    </Form>
+      {feedback && <Alert variant={feedbackVariant} className="mt-2 mb-0">{feedback}</Alert>}
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@
  * GET / - retorna a identidade desta máquina.
  * GET /peer - lista peers cadastrados, somente para o Vite local.
  * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
+ * DELETE /peer/:id - exclui um peer salvo, somente para o Vite local.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
  * GET /files/download/:filename - retorna o arquivo em Base64.
  * GET /files - lista os arquivos compartilhados.
@@ -34,7 +35,7 @@ app.use(express.json({ limit: "134mb" }));
 app.use(
   cors({
     origin: "*",
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
   }),
 );

@@ -32,20 +32,28 @@ function FileListPage() {
     <Container className="py-4">
       <Card>
         <Card.Header as="h4">Arquivos compartilhados</Card.Header>
-        <Card.Header as="h7">{api.getSelectedApiUrl()}</Card.Header>
+        <Card.Header>
+          {api.targetPeer ? `${api.targetPeer.nome} — ${api.targetPeerURL}` : "Selecione um Peer para acessar os arquivos."}
+        </Card.Header>
         <Card.Body>
           <Button
             type="button"
             variant="outline-secondary"
-            onClick={() => setShowApiUrlPage(true)}
+            onClick={() => {
+              // Arquivos do alvo anterior não podem aparecer como se fossem do novo.
+              setFiles([]);
+              setError("");
+              setShowApiUrlPage(true);
+            }}
+            disabled={loading}
             className="mb-3 me-2"
           >
-            Configurar API
+            Selecionar Peer
           </Button>
           <Button
             type="button"
             onClick={handleFetchFiles}
-            disabled={loading}
+            disabled={loading || !api.targetPeer}
             className="mb-3"
           >
             {loading ? "Carregando..." : "Buscar arquivos"}

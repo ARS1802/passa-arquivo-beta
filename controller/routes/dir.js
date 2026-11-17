@@ -10,13 +10,6 @@ export default function dirRoute() {
     return response.json({ SHARED_DIR: process.env.SHARED_DIR || null });
   });
 
-  // Escolher uma pasta não a compartilha; a GUI confirma o caminho em POST /dir.
-  router.post("/picker", async (_request, response) => {
-    const directory = await Directory.selectDirectory();
-    if (directory === null) return response.sendStatus(204);
-    return response.json({ SHARED_DIR: directory });
-  });
-
   router.post("/", async (request, response, next) => {
     try {
       const directory = await Directory.setSharedDir(request.body?.SHARED_DIR);

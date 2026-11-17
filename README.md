@@ -31,26 +31,21 @@ pelo `define` do Vite. Essas informações de rede não exigem arquivo ou rota p
 
 ## Diretório compartilhado
 
-A interface abre a tela `SelectDir.jsx`. Clique em **Escolher diretório**, selecione
-uma pasta no diálogo nativo e aguarde a confirmação. O botão **Diretório compartilhado**
-na tela de arquivos permite trocar essa escolha depois.
-
-O seletor usa o **Zenity no Linux**, instalado no sistema, e a API deve estar rodando
-na sessão gráfica do usuário. O navegador não fornece o caminho absoluto de uma
-pasta: por isso, a GUI solicita o diálogo à API local e depois envia o caminho escolhido.
-Cancelar o diálogo mantém o compartilhamento anterior. Se o Zenity ou a sessão
-gráfica não estiver disponível, a interface mostra o erro.
+A interface abre a tela `SelectDir.jsx`. O botão **Escolher diretório** usa
+`showDirectoryPicker()` no navegador, quando disponível. Essa API fornece um
+handle e o nome da pasta, mas não seu caminho absoluto. Por isso, informe o
+**Caminho absoluto** e clique em **Compartilhar diretório** para enviar o endereço
+à API. Também é possível informar diretamente o caminho, inclusive para pastas vazias.
+O picker não envia arquivos nem inicia processos no servidor.
 
 `model/Directory.js` concentra a consulta, validação e atualização de `SHARED_DIR`
-e a abertura do seletor nativo nos métodos estáticos `getSharedDir()`,
-`setSharedDir()` e `selectDirectory()`.
+nos métodos estáticos `getSharedDir()` e `setSharedDir()`.
 
 Todas as rotas abaixo usam `network.requireLocalVite`, o mesmo middleware de
 consulta e exclusão de peers. A conexão e a origem devem pertencer ao Vite local,
 mesmo quando o Peer selecionado na interface é remoto.
 
 - `GET /dir`: retorna `{ "SHARED_DIR": "/caminho/da/pasta" }`, ou `null` no campo quando não configurado.
-- `POST /dir/picker`: abre o seletor e retorna o caminho escolhido, sem alterar o compartilhamento; cancelar retorna `204`.
 - `POST /dir`: recebe `{ "SHARED_DIR": "/caminho/da/pasta" }`. Confirma que o caminho é absoluto, existe e é um diretório. Somente então atualiza `process.env.SHARED_DIR` e retorna o caminho real.
 
 Um caminho inválido ou que aponta para um arquivo retorna `400`; uma pasta

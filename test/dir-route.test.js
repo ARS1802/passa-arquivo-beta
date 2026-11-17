@@ -10,7 +10,6 @@ import dirRoute from "../controller/routes/dir.js";
 import listRoute from "../controller/routes/list.js";
 import uploadRoute from "../controller/routes/upload.js";
 import downloadRoute from "../controller/routes/download.js";
-import Directory from "../model/Directory.js";
 import network from "../model/Network.js";
 
 test("diretório compartilhado é validado, exclusivo do Vite local e atualizado sem reiniciar", async (t) => {
@@ -30,12 +29,6 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
   });
   t.mock.method(network, "getIps", () => ["192.168.1.10"]);
   let address = "127.0.0.1";
-  let picked = first;
-  let pickerCalls = 0;
-  t.mock.method(Directory, "selectDirectory", async () => {
-    pickerCalls++;
-    return picked;
-  });
   const app = express();
   app.use(express.json());
   app.use(cors());
@@ -64,7 +57,7 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
   assert.equal((await fetch(`${base}/files/download/primeiro.txt`)).status, 409);
   assert.equal((await upload()).status, 409);
 
-  await t.test("rejeita origem ou conexão remotas antes de abrir o picker ou alterar a pasta", async () => {
+  await t.test("rejeita origem ou conexão remotas antes de alterar a pasta", async () => {
     for (const [remoteAddress, requestOrigin] of [
       ["127.0.0.1", undefined],
       ["127.0.0.1", `http://localhost:${network.vitePort + 1}`],
@@ -72,7 +65,7 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
       ["::ffff:192.168.1.99", origin],
     ]) {
       address = remoteAddress;
-      for (const [route, method] of [["/dir", "GET"], ["/dir", "POST"], ["/dir/picker", "POST"]]) {
+      for (const [route, method] of [["/dir", "GET"], ["/dir", "POST"]]) {
         const response = await fetch(`${base}${route}`, {
           method,
           headers: { "X-Forwarded-For": "127.0.0.1", ...(requestOrigin ? { Origin: requestOrigin } : {}) },
@@ -81,17 +74,8 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
         assert.equal(response.headers.get("access-control-allow-origin"), null);
       }
     }
-    assert.equal(pickerCalls, 0);
     assert.equal(process.env.SHARED_DIR, undefined);
     address = "::ffff:192.168.1.10";
-  });
-
-  await t.test("picker retorna caminho ou cancelamento, sem compartilhar por conta própria", async () => {
-    const response = await fetch(`${base}/dir/picker`, { method: "POST", headers });
-    assert.deepEqual(await response.json(), { SHARED_DIR: first });
-    assert.equal(process.env.SHARED_DIR, undefined);
-    picked = null;
-    assert.equal((await fetch(`${base}/dir/picker`, { method: "POST", headers })).status, 204);
   });
 
   const response = await update(first);
@@ -127,34 +111,4 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
   await symlink(second, link);
   assert.deepEqual(await (await update(link)).json(), { SHARED_DIR: second });
   assert.equal(process.env.SHARED_DIR, second);
-});
-
-test("seletor nativo preserva espaços e distingue seleção, cancelamento e falha", { skip: process.platform !== "linux" }, async (t) => {
-  const previous = Object.fromEntries(["PATH", "DISPLAY", "WAYLAND_DISPLAY"].map((key) => [key, process.env[key]]));
-  const temporary = await mkdtemp(path.join(os.tmpdir(), "passa-picker-"));
-  t.after(async () => {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-    await rm(temporary, { recursive: true, force: true });
-  });
-  // Executável de teste: exercita a chamada ao sistema sem abrir janelas reais.
-  process.env.PATH = temporary;
-  process.env.DISPLAY = ":teste";
-  const executable = path.join(temporary, "zenity");
-  await writeFile(executable, `#!/bin/sh
-test "$1" = "--file-selection" && test "$2" = "--directory" || exit 2
-printf '%s\\n' '/tmp/Pasta com espaços '
-`, { mode: 0o700 });
-  assert.equal(await Directory.selectDirectory(), "/tmp/Pasta com espaços ");
-  await writeFile(executable, "#!/bin/sh\nexit 1\n");
-  assert.equal(await Directory.selectDirectory(), null);
-  await writeFile(executable, "#!/bin/sh\nprintf 'Falha no display' >&2\nexit 1\n");
-  await assert.rejects(Directory.selectDirectory(), { status: 503 });
-  await rm(executable);
-  await assert.rejects(Directory.selectDirectory(), { status: 503 });
-  delete process.env.DISPLAY;
-  delete process.env.WAYLAND_DISPLAY;
-  await assert.rejects(Directory.selectDirectory(), { status: 503 });
 });

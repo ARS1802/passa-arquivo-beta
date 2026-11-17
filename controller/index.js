@@ -5,7 +5,6 @@
  * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
  * DELETE /peer/:id - exclui um peer salvo, somente para o Vite local.
  * GET /dir e POST /dir - consultam e alteram SHARED_DIR, somente para o Vite local.
- * POST /dir/picker - abre o seletor nativo na máquina da API.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
  * GET /files/download/:filename - retorna o arquivo em Base64.
  * GET /files - lista os arquivos compartilhados.
@@ -63,7 +62,7 @@ app.use((error, request, response, next) => {
       .json({ error: "Arquivo excede o limite de 100 MB." });
   }
 
-  if (error.status === 409 || error.status === 503) {
+  if (error.status === 409) {
     return response.status(error.status).json({ error: error.message });
   }
 

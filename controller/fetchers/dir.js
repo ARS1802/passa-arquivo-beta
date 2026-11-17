@@ -1,6 +1,5 @@
 async function requestDirectory(url, options) {
   const response = await fetch(url, options);
-  if (response.status === 204) return null;
   const result = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -15,10 +14,6 @@ async function requestDirectory(url, options) {
 
 export function getSharedDir(apiUrl) {
   return requestDirectory(`${apiUrl}/dir`);
-}
-
-export function selectDirectory(apiUrl) {
-  return requestDirectory(`${apiUrl}/dir/picker`, { method: "POST" });
 }
 
 export async function setSharedDir(apiUrl, directory) {

@@ -72,7 +72,6 @@
         <h2>Diretório compartilhado</h2>
         <p>Estas rotas aceitam somente a conexão e a origem do Vite local.</p>
         <p><strong>GET /dir</strong> retorna o diretório atual em <code>SHARED_DIR</code> (ou <code>null</code>).</p>
-        <p><strong>POST /dir/picker</strong> abre o seletor nativo (Zenity no Linux) e retorna o caminho escolhido. Cancelar retorna <code>204</code>.</p>
         <p><strong>POST /dir</strong> valida e define o diretório compartilhado:</p>
         <pre>{ "SHARED_DIR": "/home/usuario/Compartilhado" }</pre>
         <p>A resposta contém o caminho real no mesmo formato. Um caminho inválido retorna <code>400</code>; inexistente, <code>404</code>. Falhas preservam a escolha anterior.</p>

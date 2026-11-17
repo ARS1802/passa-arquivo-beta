@@ -2,7 +2,7 @@ import { downloadFile } from "./download.js";
 import { discoverPeers as scanNetwork, isValidIpv4 } from "./discovery.js";
 import { listFiles } from "./list.js";
 import { uploadFile } from "./upload.js";
-import { getSharedDir, selectDirectory, setSharedDir } from "./dir.js";
+import { getSharedDir, setSharedDir } from "./dir.js";
 
 // O cadastro pertence à máquina local, mesmo quando outro Peer está selecionado.
 const LOCAL_API_URL = import.meta.env.LOCAL_API_URL;
@@ -70,10 +70,6 @@ export class API {
     if (!directory && this.sharedDir) return this.setSharedDir(this.sharedDir);
     this.#store({ SHARED_DIR: directory });
     return directory;
-  }
-
-  selectDirectory() {
-    return selectDirectory(LOCAL_API_URL);
   }
 
   async setSharedDir(directory) {

@@ -243,13 +243,8 @@ test("diretório usa sempre a API local e migra o cache sem perder peers", async
   api.targetPeer = second;
   let sharedDir = null;
   let rejectUpdate = false;
-  let cancelPicker = false;
   t.mock.method(globalThis, "fetch", async (url, options) => {
     if (url === `${localUrl}/peer`) return Response.json({ peers: [first, second] });
-    if (url === `${localUrl}/dir/picker`) {
-      assert.equal(options.method, "POST");
-      return cancelPicker ? new Response(null, { status: 204 }) : Response.json({ SHARED_DIR: "/tmp/Pasta com espaços" });
-    }
     assert.equal(url, `${localUrl}/dir`);
     if (options) {
       assert.equal(options.method, "POST");
@@ -260,7 +255,7 @@ test("diretório usa sempre a API local e migra o cache sem perder peers", async
     return Response.json({ SHARED_DIR: sharedDir });
   });
 
-  const selected = await api.selectDirectory();
+  const selected = "/tmp/Pasta com espaços";
   assert.equal(selected, "/tmp/Pasta com espaços");
   assert.equal(api.sharedDir, null);
   assert.deepEqual(JSON.parse(values.get(api.LOCAL_STORAGE_KEY)), [first, second]);
@@ -271,8 +266,6 @@ test("diretório usa sempre a API local e migra o cache sem perder peers", async
   rejectUpdate = true;
   await assert.rejects(api.setSharedDir("/ausente"), /Diretório não encontrado/);
   assert.equal(api.sharedDir, selected);
-  cancelPicker = true;
-  assert.equal(await api.selectDirectory(), null);
   assert.equal(api.sharedDir, selected);
 
   api.removePeerAtLocalStorage(first.id);

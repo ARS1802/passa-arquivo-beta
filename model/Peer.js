@@ -23,15 +23,19 @@ function validateId(id) {
   }
 }
 
+function validateIp(ip) {
+  if (typeof ip !== "string" || !isIPv4(ip)) {
+    throw new TypeError("Informe um endereço IPv4 válido.");
+  }
+}
+
 function validatePeer(peer) {
   if (!peer || typeof peer !== "object" || Array.isArray(peer)) {
     throw new TypeError("Informe uma identidade com nome, ip e id.");
   }
   validateNome(peer.nome);
   validateId(peer.id);
-  if (typeof peer.ip !== "string" || !isIPv4(peer.ip)) {
-    throw new TypeError("Informe um endereço IPv4 válido.");
-  }
+  validateIp(peer.ip);
 }
 
 function readFile(file, fallback) {
@@ -84,37 +88,48 @@ export default class Peer {
       : JSON.parse(stored);
 
     // Uma identidade inválida não é sobrescrita: isso evita perder o id da máquina.
-    if (!identity || typeof identity !== "object" ||
+    if (!identity || typeof identity !== "object" || Array.isArray(identity) ||
         (stored !== null && !Object.hasOwn(identity, "ip"))) {
-      throw new Error("identity.json deve conter nome, ip e id.");
+      throw new Error("identity.json deve conter ip e id.");
     }
     network.obtainCidrs();
     const current = { nome: identity.nome, id: identity.id, ip: network.getIps()[0] };
-    validatePeer(current);
+    // O nome pode ficar pendente até o usuário concluir a NamingScreen.
+    if (current.nome != null) validateNome(current.nome);
+    validateId(current.id);
+    validateIp(current.ip);
     this.#nome = current.nome;
     this.#ip = current.ip;
     this.#id = current.id;
-    writeFile(IDENTITY_FILE, `${JSON.stringify(this, null, 2)}\n`);
+    writeFile(IDENTITY_FILE, `${JSON.stringify(current, null, 2)}\n`);
     Object.freeze(this);
     Peer.#instance = this;
   }
 
+  #readIdentity() {
+    return JSON.parse(readFileSync(IDENTITY_FILE, "utf8"));
+  }
+
   get nome() {
+    this.#nome = this.#readIdentity().nome;
     return this.#nome;
   }
 
   set nome(value) {
     validateNome(value);
-    writeFile(IDENTITY_FILE, `${JSON.stringify({ ...this.toJSON(), nome: value }, null, 2)}\n`);
+    const identity = { ...this.#readIdentity(), nome: value };
+    writeFile(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`);
     this.#nome = value;
   }
 
   get ip() {
+    this.#ip = this.#readIdentity().ip;
     return this.#ip;
   }
 
   // Sem setter: o id é criado uma única vez e permanece na identidade persistida.
   get id() {
+    this.#id = this.#readIdentity().id;
     return this.#id;
   }
 

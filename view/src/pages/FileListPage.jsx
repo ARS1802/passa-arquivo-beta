@@ -5,10 +5,12 @@ import DataView from "../components/DataView.jsx";
 import FileUploadButton from "../components/FileUploadButton.jsx";
 import ApiUrlPage from "./ApiUrlPage.jsx";
 import SelectDir from "./SelectDir.jsx";
+import NamingScreen from "./NamingScreen.jsx";
 
-function FileListPage() {
+function FileListPage({ localName, onNamed }) {
   const [showApiUrlPage, setShowApiUrlPage] = useState(false);
   const [showSelectDir, setShowSelectDir] = useState(true);
+  const [showNaming, setShowNaming] = useState(false);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +26,14 @@ function FileListPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (showNaming) {
+    return <NamingScreen
+      initialName={localName}
+      onSaved={(identity) => { onNamed(identity); setShowNaming(false); }}
+      onBack={() => setShowNaming(false)}
+    />;
   }
 
   if (showSelectDir) {
@@ -42,6 +52,16 @@ function FileListPage() {
           {api.targetPeer ? `${api.targetPeer.nome} — ${api.targetPeerURL}` : "Selecione um Peer para acessar os arquivos."}
         </Card.Header>
         <Card.Body>
+          <p>Este computador: <strong>{localName}</strong></p>
+          <Button
+            type="button"
+            variant="outline-secondary"
+            onClick={() => setShowNaming(true)}
+            disabled={loading}
+            className="mb-3 me-2"
+          >
+            Alterar meu nome
+          </Button>
           <Button
             type="button"
             variant="outline-secondary"

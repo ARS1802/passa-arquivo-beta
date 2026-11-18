@@ -1,6 +1,7 @@
 /*
  * Rotas da API:
  * GET / - retorna a identidade desta máquina.
+ * POST / - altera somente o nome desta máquina, somente para o Vite local.
  * GET /peer - lista peers cadastrados, somente para o Vite local.
  * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
  * DELETE /peer/:id - exclui um peer salvo, somente para o Vite local.
@@ -18,6 +19,7 @@ import listRoute from "./routes/list.js";
 import uploadRoute from "./routes/upload.js";
 import peersRoute from "./routes/peers.js";
 import dirRoute from "./routes/dir.js";
+import identityRoute from "./routes/identity.js";
 import network from "../model/Network.js";
 import Peer from "../model/Peer.js";
 import Directory from "../model/Directory.js";
@@ -29,7 +31,7 @@ const documentationPage = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../view/pages/index.html",
 );
-const peer = new Peer("megaman");
+const peer = new Peer();
 console.log(peer);
 
 app.use(express.json({ limit: "134mb" }));
@@ -40,12 +42,7 @@ app.use(
     allowedHeaders: ["Content-Type"],
   }),
 );
-app.get("/", (_request, response) => {
-  response.set("Cache-Control", "no-store");
-  return response.sendFile(
-    fileURLToPath(new URL("../model/identity.json", import.meta.url)),
-  );
-});
+app.use("/", identityRoute(peer));
 app.use("/peer", peersRoute(peer));
 app.use("/dir", dirRoute());
 app.get("/api", (_request, response) => {
@@ -54,8 +51,7 @@ app.get("/api", (_request, response) => {
 app.use("/files", uploadRoute());
 app.use("/files", downloadRoute());
 app.use("/files", listRoute());
-
-app.use((error, request, response, next) => {
+app.use((error, request, response) => {
   if (error.type === "entity.too.large") {
     return response
       .status(413)
@@ -70,11 +66,12 @@ app.use((error, request, response, next) => {
   return response.status(500).json({ error: "Erro interno do servidor." });
 });
 
-if (process.env.SHARED_DIR) await Directory.setSharedDir(process.env.SHARED_DIR);
+if (process.env.SHARED_DIR)
+  await Directory.setSharedDir(process.env.SHARED_DIR);
 
 app.listen(port, host, () => {
   console.log(`>>>API INICIADA<<<\nEscutando em ${host}:${port}`);
-  console.log(`Este peer se chama: ${peer.nome}`);
+  console.log(`Este peer se chama: ${peer.nome ?? "(aguardando escolha do nome)"}`);
 });
 
 export default app;

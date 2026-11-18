@@ -23,6 +23,46 @@ async function loadAPI(cidrs) {
 
 const { API } = await loadAPI(["192.168.1.1/30", "192.168.1.2/32"]);
 
+test("nome é consultado e salvo na API local mesmo com outro Peer selecionado", async (t) => {
+  const api = new API();
+  api.targetPeer = second;
+  let identity = { ip: "192.168.1.10", id: first.id };
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(url, `${localUrl}/`);
+    if (options.method === "POST") {
+      assert.equal(options.headers["Content-Type"], "application/json");
+      assert.deepEqual(JSON.parse(options.body), { nome: "MeuPC" });
+      identity = { ...identity, nome: "MeuPC" };
+    } else {
+      assert.equal(options.cache, "no-store");
+    }
+    return Response.json(identity);
+  });
+  assert.equal((await api.getLocalIdentity()).nome, undefined);
+  assert.deepEqual(await api.setLocalName("MeuPC"), identity);
+  assert.equal((await api.getLocalIdentity()).nome, "MeuPC");
+  assert.deepEqual(api.targetPeer, second);
+});
+
+test("naming propaga falhas e só confirma um nome salvo pela API", async (t) => {
+  const api = new API();
+  for (const status of [400, 403, 500]) {
+    t.mock.method(globalThis, "fetch", async () => Response.json({ error: "Falha ao salvar nome." }, { status }));
+    await assert.rejects(api.getLocalIdentity(), /Falha ao salvar nome/);
+    await assert.rejects(api.setLocalName("MeuPC"), /Falha ao salvar nome/);
+  }
+  t.mock.method(globalThis, "fetch", async () => new Response("indisponível", { status: 503 }));
+  await assert.rejects(api.getLocalIdentity(), /503/);
+  for (const identity of [{}, null, [], { ...first, nome: 123 }]) {
+    t.mock.method(globalThis, "fetch", async () => Response.json(identity));
+    await assert.rejects(api.getLocalIdentity(), /identidade válida/);
+  }
+  for (const nome of [undefined, null, "", "OutroNome"]) {
+    t.mock.method(globalThis, "fetch", async () => Response.json({ ...first, nome }));
+    await assert.rejects(api.setLocalName("MeuPC"), /não confirmou/);
+  }
+});
+
 function setGlobal(t, name, value) {
   const original = Object.getOwnPropertyDescriptor(globalThis, name);
   Object.defineProperty(globalThis, name, { value, configurable: true });

@@ -31,7 +31,8 @@ pelo `define` do Vite. Essas informações de rede não exigem arquivo ou rota p
 
 ## Diretório compartilhado
 
-A interface abre a tela `SelectDir.jsx`. O botão **Escolher diretório** usa
+Após confirmar o nome deste Peer, a interface abre a tela `SelectDir.jsx`.
+O botão **Escolher diretório** usa
 `showDirectoryPicker()` no navegador, quando disponível. Essa API fornece um
 handle e o nome da pasta, mas não seu caminho absoluto. Por isso, informe o
 **Caminho absoluto** e clique em **Compartilhar diretório** para enviar o endereço
@@ -93,15 +94,18 @@ classe. Os módulos de `controller/fetchers/` fazem as requisições e tratam su
 
 `model/Peer.js` exporta a classe `Peer`, exclusiva do Node.js. Ela é um Singleton:
 todas as chamadas a `new Peer()` no mesmo processo retornam a mesma instância,
-que representa a máquina atual. O nome inicial fica pendente de quem chamar o
-construtor; deve ter de 1 a 15 caracteres, sem espaços ou outros caracteres de
-espaçamento. A API instancia `Peer` com o nome inicial definido em
-`controller/index.js`; ainda não há uma tela para defini-lo.
+que representa a máquina atual. A API pode iniciar sem nome: a interface consulta
+`GET /` usando `import.meta.env.LOCAL_API_URL` e abre `NamingScreen.jsx` quando o
+nome estiver ausente ou nulo. É obrigatório salvar um nome para acessar as demais
+telas. O nome deve ter de 1 a 15 caracteres, sem espaços ou outros caracteres de
+espaçamento. Quando já existe, o fluxo segue para o diretório compartilhado; o
+botão **Alterar meu nome**, na tela de arquivos, permite abrir a tela opcionalmente.
+Falhas ao consultar a identidade oferecem uma nova tentativa, sem liberar o fluxo.
 
 ```js
 import Peer from "./model/Peer.js";
 
-const peer = new Peer("MeuPC"); // Nome obrigatório somente na primeira execução.
+const peer = new Peer(); // O nome será escolhido pela interface.
 console.log(peer.nome, peer.ip, peer.id);
 console.log(new Peer() === peer); // true
 
@@ -112,12 +116,14 @@ peer.updatePeer(peers[0].id, { nome: "Notebook", ip: "192.168.1.30" });
 peer.removePeer(peers[0].id);
 ```
 
-Na primeira criação, `randomUUID()` gera o id e a classe salva `nome`, `ip` e `id`
-em `model/identity.json`. Nas próximas execuções, nome e id vêm desse arquivo,
-mesmo que outro nome seja passado ao construtor. Apenas o IP é obtido novamente
+Na primeira criação, `randomUUID()` gera o id e a classe salva `ip` e `id`
+em `model/identity.json`; `nome` pode ficar ausente até a escolha do usuário.
+Nas próximas execuções, nome e id vêm desse arquivo. Apenas o IP é obtido novamente
 de `network.getIps()[0]`, após atualizar as interfaces, e salvo no JSON.
-`peer.nome = "NovoNome"` valida e persiste uma alteração de nome. O id não pode
-ser alterado. O JSON é ignorado pelo Git para não distribuir a identidade de uma
+Os getters `nome`, `ip` e `id` leem o arquivo a cada acesso e atualizam os atributos
+privados correspondentes. `peer.nome = "NovoNome"` lê a identidade atual, valida e
+persiste apenas a alteração do nome, preservando os demais campos. O id não possui
+setter. O JSON é ignorado pelo Git para não distribuir a identidade de uma
 máquina às demais. Um JSON inválido ou a ausência de IPv4 causa erro sem substituir
 a identidade existente.
 
@@ -130,6 +136,13 @@ lançam exceções sem alterar o cadastro. Os caminhos são relativos ao módulo
 independentemente da pasta em que o programa é executado.
 
 A rota `GET /` retorna o conteúdo de `model/identity.json`, com nome, IP e id.
+A rota `POST /` recebe somente `{ "nome": "MeuPC" }` e retorna a identidade
+atualizada. Usa `network.requireLocalVite`: apenas a conexão e a origem do Vite
+local são aceitas. Nomes inválidos e campos adicionais retornam `400`; acessos
+fora dessa restrição retornam `403`. A alteração preserva IP e UUID.
+O fetcher `controller/fetchers/naming.js` é usado por `api.getLocalIdentity()` e
+`api.setLocalName(nome)`, sempre na API local, independentemente do Peer selecionado.
+
 A descoberta lê esse JSON e envia a identidade para `POST /peer` na API
 local. Essa rota chama `peer.savePeer(identity)`: um id novo é cadastrado; um id
 existente com outro IP tem somente o IP atualizado, preservando nome e id. Se o
@@ -217,7 +230,8 @@ Peers remotos são objetos simples: a classe `model/Peer.js` continua exclusiva
 do Node.js e representa apenas a máquina local. A View não instancia essa classe.
 
 `npm test` verifica os fetchers, a descoberta com rede simulada, o cache, a seleção,
-as restrições locais de peers e diretórios, e a troca de pasta nas operações de arquivos.
+as restrições locais de peers e diretórios, a identidade sem nome e sua atualização,
+e a troca de pasta nas operações de arquivos.
 
 ## CORS
 
@@ -225,7 +239,7 @@ A API usa o middleware `cors` em `controller/index.js` para permitir que página
 origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST`, `DELETE` e
 `OPTIONS` e o cabeçalho `Content-Type`. O middleware responde automaticamente às
 consultas prévias do navegador (preflight) com status `204`.
-`GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
+`POST /`, `GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
 descrita acima e só liberam a origem local aceita; o CORS geral não concede acesso a essas rotas.
 
 ## Upload

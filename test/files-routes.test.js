@@ -3,12 +3,12 @@ import { once } from "node:events";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import express from "express";
 import Directory from "../model/Directory.js";
-import listRoute from "../controller/routes/list.js";
-import downloadRoute from "../controller/routes/download.js";
-import uploadRoute from "../controller/routes/upload.js";
+import network from "../model/Network.js";
+import filesRoute from "../controller/routes/files.js";
 
 test("navega e baixa por caminhos relativos, mantendo o acesso dentro da pasta compartilhada", async (t) => {
   const previousDirectory = process.env.SHARED_DIR;
@@ -31,9 +31,20 @@ test("navega e baixa por caminhos relativos, mantendo o acesso dentro da pasta c
     await rm(temporary, { recursive: true, force: true });
   });
 
+  // Usa o Model real com arquivos temporários para testar autorização e revogação.
+  t.mock.method(network, "obtainCidrs", () => {});
+  t.mock.method(network, "getIps", () => ["192.168.1.10"]);
+  const source = (await readFile(new URL("../model/Peer.js", import.meta.url), "utf8"))
+    .replace('"./Network.js"', JSON.stringify(new URL("../model/Network.js", import.meta.url).href))
+    .replace('"../controller/peers.csv"', '"./peers.csv"');
+  const moduleUrl = pathToFileURL(path.join(temporary, "Peer.mjs"));
+  await writeFile(moduleUrl, source);
+  const { default: Peer } = await import(moduleUrl.href);
+  const peer = new Peer("MeuPC");
+  const headers = { "X-Peer-Id": peer.id };
   const app = express();
   app.use(express.json());
-  app.use("/files", uploadRoute(), downloadRoute(), listRoute());
+  app.use("/files", filesRoute(peer));
   app.use((error, _request, response, _next) => {
     response.status(error.status || 500).json({ error: error.message });
   });
@@ -41,8 +52,22 @@ test("navega e baixa por caminhos relativos, mantendo o acesso dentro da pasta c
   t.after(() => new Promise((resolve) => server.close(resolve)));
   await once(server, "listening");
   const base = `http://127.0.0.1:${server.address().port}/files`;
-  const list = (directory = "") => fetch(`${base}/list/${encodeURIComponent(directory)}`);
-  const download = (filePath) => fetch(`${base}/download/${encodeURIComponent(filePath)}`);
+  const list = (directory = "") => fetch(`${base}/list/${encodeURIComponent(directory)}`, { headers });
+  const download = (filePath) => fetch(`${base}/download/${encodeURIComponent(filePath)}`, { headers });
+
+  await t.test("rejeita requisições sem id ou com id desconhecido antes de acessar arquivos", async () => {
+    for (const id of [undefined, "inválido", "6d895d28-3105-4ab0-902a-2bb6e6bc7d65"]) {
+      const headers = id ? { "X-Peer-Id": id } : {};
+      assert.equal((await fetch(`${base}/list/`, { headers })).status, 403);
+      assert.equal((await fetch(`${base}/download/raiz.txt`, { headers })).status, 403);
+      const response = await fetch(`${base}/upload`, {
+        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: "negado.txt", data: "b2k=" }),
+      });
+      assert.equal(response.status, 403);
+    }
+    await assert.rejects(readFile(path.join(shared, "negado.txt")), { code: "ENOENT" });
+  });
 
   await t.test("lista somente os arquivos e diretórios do nível solicitado", async () => {
     const root = await (await list()).json();
@@ -101,12 +126,37 @@ test("navega e baixa por caminhos relativos, mantendo o acesso dentro da pasta c
   await t.test("upload continua na raiz mesmo depois de navegar", async () => {
     await list("Faculdade/Janeiro");
     const response = await fetch(`${base}/upload`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ filename: "novo.txt", data: "b2k=" }),
     });
     assert.equal(response.status, 201);
     assert.equal(await readFile(path.join(shared, "novo.txt"), "utf8"), "oi");
     await assert.rejects(readFile(path.join(shared, "Faculdade", "Janeiro", "novo.txt")), { code: "ENOENT" });
     assert.equal(process.env.SHARED_DIR, shared);
+  });
+
+  await t.test("autoriza peer cadastrado por id e bloqueia as três rotas após a remoção", async () => {
+    const remote = { nome: "OutroPC", ip: "192.168.1.20", id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a" };
+    peer.appendPeer(remote);
+    const remoteHeaders = { "X-Peer-Id": remote.id };
+    const send = () => fetch(`${base}/upload`, {
+      method: "POST", headers: { ...remoteHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: "remoto.txt", data: "b2k=" }),
+    });
+    assert.equal((await fetch(`${base}/list/`, { headers: remoteHeaders })).status, 200);
+    assert.equal((await fetch(`${base}/download/raiz.txt`, { headers: remoteHeaders })).status, 200);
+    assert.equal((await send()).status, 201);
+    assert.equal(peer.removePeer(remote.id), true);
+    assert.equal((await fetch(`${base}/list/`, { headers: remoteHeaders })).status, 403);
+    assert.equal((await fetch(`${base}/download/raiz.txt`, { headers: remoteHeaders })).status, 403);
+    assert.equal((await send()).status, 403);
+  });
+
+  await t.test("não libera arquivos quando o cadastro está ausente ou ilegível", async () => {
+    const peersFile = path.join(temporary, "peers.csv");
+    await rm(peersFile);
+    assert.equal((await list()).status, 403);
+    await mkdir(peersFile);
+    assert.equal((await list()).status, 500);
   });
 });

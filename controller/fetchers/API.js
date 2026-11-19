@@ -163,16 +163,20 @@ export class API {
     this.removePeerAtLocalStorage(id);
   }
 
-  listFiles(...parameters) {
-    return listFiles(this.#getTargetPeerURL(), ...parameters);
+  listFiles(directoryPath = "") {
+    const url = this.#getTargetPeerURL();
+    // O cabeçalho identifica quem pede o arquivo, mesmo ao acessar outro Peer.
+    return this.getLocalIdentity().then(({ id }) => listFiles(url, directoryPath, id));
   }
 
-  downloadFile(...parameters) {
-    return downloadFile(this.#getTargetPeerURL(), ...parameters);
+  downloadFile(filePath) {
+    const url = this.#getTargetPeerURL();
+    return this.getLocalIdentity().then(({ id }) => downloadFile(url, filePath, id));
   }
 
-  uploadFile(...parameters) {
-    return uploadFile(this.#getTargetPeerURL(), ...parameters);
+  uploadFile(file) {
+    const url = this.#getTargetPeerURL();
+    return this.getLocalIdentity().then(({ id }) => uploadFile(url, file, id));
   }
 }
 

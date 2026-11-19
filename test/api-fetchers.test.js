@@ -115,6 +115,7 @@ test("seleção é explícita e direciona listagem, upload e download para um ú
   });
   t.mock.method(globalThis, "fetch", async (url, options) => {
     requests.push({ url, options });
+    if (url === `${localUrl}/`) return Response.json(second);
     if (url === `${localUrl}/peer`) return Response.json({ peers: [first, second] });
     if (url.endsWith("/files/list/")) return Response.json({ files: [], directories: [] });
     return Response.json({ filename: "olá.txt", mimeType: "text/plain", data: "b2k=" });
@@ -134,13 +135,16 @@ test("seleção é explícita e direciona listagem, upload e download para um ú
   await api.listFiles();
   await api.uploadFile({ filename: "olá.txt", data: "b2k=" });
   await api.downloadFile("olá.txt");
-  const fileRequests = requests.filter(({ url }) => url !== `${localUrl}/peer`);
+  const fileRequests = requests.filter(({ url }) => url.includes("/files/"));
   assert.deepEqual(fileRequests.map(({ url }) => url), [
     `http://${first.ip}:3000/files/list/`,
     `http://${first.ip}:3000/files/upload`,
     `http://${first.ip}:3000/files/download/ol%C3%A1.txt`,
   ]);
   assert.equal(fileRequests[1].options.method, "POST");
+  for (const request of fileRequests) {
+    assert.equal(request.options.headers["X-Peer-Id"], second.id, "Envia o id local, mesmo com outro Peer selecionado");
+  }
   assert.deepEqual(JSON.parse(fileRequests[1].options.body), { filename: "olá.txt", data: "b2k=" });
   assert.equal(clicked, true);
   await api.selectPeer({ ip: second.ip });
@@ -165,6 +169,7 @@ test("fetchers enviam somente o caminho relativo e preservam arquivos e diretór
   });
   const requests = [];
   t.mock.method(globalThis, "fetch", async (url) => {
+    if (url === `${localUrl}/`) return Response.json(second);
     requests.push(url);
     if (url.includes("/download/")) return Response.json({ filename, mimeType: "text/plain", data: "b2k=" });
     return Response.json(listing);
@@ -178,12 +183,26 @@ test("fetchers enviam somente o caminho relativo e preservam arquivos e diretór
   assert.equal(savedName, filename);
 
   for (const invalid of [null, { files: [] }, { files: [], directories: [{}] }, { files: [{}], directories: [] }]) {
-    t.mock.method(globalThis, "fetch", async () => Response.json(invalid));
+    t.mock.method(globalThis, "fetch", async (url) => Response.json(url === `${localUrl}/` ? second : invalid));
     await assert.rejects(api.listFiles(), /lista de arquivos e diretórios válida/);
   }
-  t.mock.method(globalThis, "fetch", async () => Response.json({ error: "Acesso fora do diretório compartilhado." }, { status: 403 }));
+  t.mock.method(globalThis, "fetch", async (url) => url === `${localUrl}/`
+    ? Response.json(second)
+    : Response.json({ error: "Acesso fora do diretório compartilhado." }, { status: 403 }));
   await assert.rejects(api.listFiles(".."), /Acesso fora/);
   await assert.rejects(api.downloadFile("../privado.txt"), /Acesso fora/);
+});
+
+test("falha ao consultar identidade local impede requisições de arquivos", async (t) => {
+  const api = new API();
+  api.targetPeer = first;
+  t.mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(url, `${localUrl}/`);
+    return Response.json({ error: "Identidade indisponível." }, { status: 500 });
+  });
+  await assert.rejects(api.listFiles(), /Identidade indisponível/);
+  await assert.rejects(api.downloadFile("arquivo.txt"), /Identidade indisponível/);
+  await assert.rejects(api.uploadFile({ filename: "arquivo.txt", data: "b2k=" }), /Identidade indisponível/);
 });
 
 test("localStorage guarda objetos por id, atualiza IP e remove somente o Peer pedido", async (t) => {

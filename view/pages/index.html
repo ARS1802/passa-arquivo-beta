@@ -88,6 +88,13 @@
       </section>
 
       <section>
+        <h2>Acesso aos arquivos</h2>
+        <p>Listagem, upload e download exigem o cabeçalho <code>X-Peer-Id</code> com o UUID do dispositivo solicitante cadastrado em <code>peers.csv</code>. Id ausente, inválido ou desconhecido retorna <code>403</code>.</p>
+        <p>O primeiro registro do CSV pertence ao próprio dispositivo e acompanha as alterações do seu nome. Os fetchers enviam o ID local automaticamente. Para compartilhar entre dois dispositivos, execute a descoberta em ambos.</p>
+        <p>A verificação atual confere somente o cadastro do UUID; a identidade em <strong>GET /</strong> continua pública.</p>
+      </section>
+
+      <section>
         <h2>Upload</h2>
         <p><strong>POST /files/upload</strong></p>
         <p>Envie um corpo JSON com o nome, o tipo MIME e o conteúdo do arquivo:</p>

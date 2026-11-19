@@ -1,8 +1,9 @@
-export async function uploadFile(apiUrl, file) {
+export async function uploadFile(apiUrl, file, peerId) {
   const response = await fetch(`${apiUrl}/files/upload`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Peer-Id": peerId,
     },
     body: JSON.stringify(file),
   });

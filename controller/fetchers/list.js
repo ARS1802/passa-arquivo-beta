@@ -1,5 +1,7 @@
-export async function listFiles(apiUrl, directoryPath = "") {
-  const response = await fetch(`${apiUrl}/files/list/${encodeURIComponent(directoryPath)}`);
+export async function listFiles(apiUrl, directoryPath = "", peerId) {
+  const response = await fetch(`${apiUrl}/files/list/${encodeURIComponent(directoryPath)}`, {
+    headers: { "X-Peer-Id": peerId },
+  });
 
   if (!response.ok) {
     let message = `Não foi possível listar os arquivos (${response.status}).`;

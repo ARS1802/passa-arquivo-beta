@@ -9,14 +9,13 @@
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
  * GET /files/download/:path - recebe o caminho relativo codificado e retorna o arquivo em Base64.
  * GET /files/list/Faculdade%2FJaneiro - lista arquivos e pastas desse nível; sem path, lista a raiz.
+ * Todas as rotas /files exigem X-Peer-Id com um id cadastrado em peers.csv.
  */
 import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import downloadRoute from "./routes/download.js";
-import listRoute from "./routes/list.js";
-import uploadRoute from "./routes/upload.js";
+import filesRoute from "./routes/files.js";
 import peersRoute from "./routes/peers.js";
 import dirRoute from "./routes/dir.js";
 import identityRoute from "./routes/identity.js";
@@ -39,7 +38,7 @@ app.use(
   cors({
     origin: "*",
     methods: ["GET", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", "X-Peer-Id"],
   }),
 );
 app.use("/", identityRoute(peer));
@@ -48,9 +47,7 @@ app.use("/dir", dirRoute());
 app.get("/api", (_request, response) => {
   return response.sendFile(documentationPage);
 });
-app.use("/files", uploadRoute());
-app.use("/files", downloadRoute());
-app.use("/files", listRoute());
+app.use("/files", filesRoute(peer));
 app.use((error, _request, response, _next) => {
   if (error.type === "entity.too.large") {
     return response

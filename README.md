@@ -117,27 +117,37 @@ console.log(new Peer() === peer); // true
 // A identidade abaixo deve vir do outro dispositivo, incluindo o UUID dele.
 peer.appendPeer({ nome: "OutroPC", ip: "192.168.1.20", id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a" });
 const peers = peer.getPeers();
-peer.updatePeer(peers[0].id, { nome: "Notebook", ip: "192.168.1.30" });
-peer.removePeer(peers[0].id);
+console.log(await peer.isRegistered(peers[1].id)); // true
+peer.updatePeer(peers[1].id, { nome: "Notebook", ip: "192.168.1.30" });
+peer.removePeer(peers[1].id);
 ```
 
 Na primeira criação, `randomUUID()` gera o id e a classe salva `ip` e `id`
 em `model/identity.json`; `nome` pode ficar ausente até a escolha do usuário.
 Nas próximas execuções, nome e id vêm desse arquivo. Apenas o IP é obtido novamente
-de `network.getIps()[0]`, após atualizar as interfaces, e salvo no JSON.
+de `network.getIps()[0]`, após atualizar as interfaces, e salvo no JSON e no CSV.
 Os getters `nome`, `ip` e `id` leem o arquivo a cada acesso e atualizam os atributos
 privados correspondentes. `peer.nome = "NovoNome"` lê a identidade atual, valida e
-persiste apenas a alteração do nome, preservando os demais campos. O id não possui
+persiste a alteração no JSON e no primeiro registro do CSV, preservando os demais campos. O id não possui
 setter. O JSON é ignorado pelo Git para não distribuir a identidade de uma
 máquina às demais. Um JSON inválido ou a ausência de IPv4 causa erro sem substituir
 a identidade existente.
 
-Os outros peers são registros simples em `controller/peers.csv`, com cabeçalho
-`nome,ip,id`. `getPeers()` lê os registros, `appendPeer()` acrescenta um registro e
+Os peers são registros simples em `controller/peers.csv`, com cabeçalho
+`nome,ip,id`. O primeiro registro após o cabeçalho pertence sempre à máquina local,
+inclusive antes da escolha do nome (nesse caso, a célula `nome` fica vazia).
+Na instanciação, o JSON fornece o id e o nome, e a rede fornece o IP atual.
+Se o primeiro registro tiver outro id, ele vai para o final; o registro local é
+inserido no início, sem duplicá-lo caso já estivesse em outra posição. Se o id
+for igual, nome e IP são atualizados e a ordem dos demais registros é preservada.
+
+`getPeers()` lê os registros, `appendPeer()` acrescenta um registro e
 rejeita ids repetidos, `updatePeer(id, { nome, ip })` permite alterar somente nome
 e/ou IP, e `removePeer(id)` exclui pelo id. Atualizar ou excluir um id ausente
 retorna `false`; quando a operação é realizada, retorna `true`. Erros de validação
-lançam exceções sem alterar o cadastro. Os caminhos são relativos ao módulo,
+lançam exceções sem alterar o cadastro. O registro local não pode ser excluído
+nem alterado por `updatePeer()`; use o setter `nome` para renomear a própria máquina.
+Os caminhos são relativos ao módulo,
 independentemente da pasta em que o programa é executado.
 
 A rota `GET /` retorna o conteúdo de `model/identity.json`, com nome, IP e id.
@@ -151,11 +161,13 @@ O fetcher `controller/fetchers/naming.js` é usado por `api.getLocalIdentity()` 
 A descoberta lê esse JSON e envia a identidade para `POST /peer` na API
 local. Essa rota chama `peer.savePeer(identity)`: um id novo é cadastrado; um id
 existente com outro IP tem somente o IP atualizado, preservando nome e id. Se o
-IP também for igual, o arquivo não é reescrito. O cadastro ainda não implementa
+IP também for igual, o arquivo não é reescrito. A descoberta ignora alterações
+do próprio id, cuja identidade é mantida pelo construtor e pelo setter `nome`.
+O cadastro ainda não implementa
 pareamento ou autenticação de dispositivos.
 
-`GET /peer` retorna `{ "peers": [...] }` com os registros do CSV (ou um array
-vazio quando não há cadastros). O acesso exige uma conexão da própria máquina
+`GET /peer` retorna `{ "peers": [...] }` com os registros do CSV, incluindo o próprio
+dispositivo na primeira posição. O acesso exige uma conexão da própria máquina
 e o cabeçalho `Origin` do Vite local: HTTP na porta `VITE_PORT`, usando `localhost`,
 loopback ou um IPv4 da máquina. Outras origens, conexões remotas e requisições
 sem `Origin` recebem `403`. O Vite usa a porta configurada e falha se ela estiver
@@ -165,7 +177,22 @@ processos locais, que podem imitar o cabeçalho `Origin`.
 
 `DELETE /peer/:id` aplica a mesma restrição de conexão e origem local. Chama
 `peer.removePeer(id)` e retorna `204` quando exclui o registro, `404` quando o
-id não existe e `400` para um id inválido.
+id não existe e `400` para um id inválido ou uma tentativa de excluir o próprio dispositivo.
+
+As rotas de listagem, upload e download passam pelo `router.use()` de
+`controller/routes/files.js`. Cada requisição deve enviar `X-Peer-Id` com o UUID
+do dispositivo solicitante, que precisa existir no `peers.csv` do destino.
+O método assíncrono `peer.isRegistered(id)` usa `createReadStream` e `readline` para
+consultar o CSV linha a linha, com *early exit* ao encontrar o id e fechamento da
+stream mesmo nessa saída antecipada. Id ausente, inválido ou não cadastrado
+retorna `403`; falhas de leitura do cadastro não liberam o acesso.
+
+Os métodos de arquivos da classe `API` consultam a identidade local e enviam esse
+cabeçalho automaticamente, inclusive ao acessar o próprio diretório. Para dois
+dispositivos compartilharem arquivos entre si, ambos precisam cadastrar o outro
+pela descoberta. A verificação é somente de cadastro por UUID: conhecer um UUID
+cadastrado ainda permite usá-lo no cabeçalho. `GET /` continua público, conforme
+o fluxo atual; autenticação por certificados fica para uma etapa futura.
 
 Para configurar a porta, copie `.env.example` para `.env` na raiz e altere
 `VITE_PORT=5173`. Sem configuração, o padrão é 5173. Variáveis definidas no
@@ -246,10 +273,11 @@ fora da raiz compartilhada.
 
 A API usa o middleware `cors` em `controller/index.js` para permitir que páginas de qualquer
 origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST`, `DELETE` e
-`OPTIONS` e o cabeçalho `Content-Type`. O middleware responde automaticamente às
+`OPTIONS` e os cabeçalhos `Content-Type` e `X-Peer-Id`. O middleware responde automaticamente às
 consultas prévias do navegador (preflight) com status `204`.
 `POST /`, `GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
 descrita acima e só liberam a origem local aceita; o CORS geral não concede acesso a essas rotas.
+As requisições de arquivos também precisam passar pela consulta de cadastro por ID.
 
 ## Listagem e navegação
 
@@ -261,6 +289,8 @@ GET /files/list/
 GET /files/list/Faculdade
 GET /files/list/Faculdade%2FJaneiro
 ```
+
+Envie `X-Peer-Id: <id-do-solicitante-cadastrado>` em cada uma dessas requisições.
 
 `path` é opcional: ausente ou vazio, representa a raiz compartilhada. O fetcher
 recebe apenas o caminho relativo (`api.listFiles("Faculdade/Janeiro")`) e cuida
@@ -293,6 +323,7 @@ Envie um JSON com o nome do arquivo e seu conteúdo em Base64:
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
+  -H "X-Peer-Id: <id-do-solicitante-cadastrado>" \
   -d '{"filename":"documento.pdf","data":"<conteudo-em-base64>"}' \
   http://<ip-da-maquina>:3000/files/upload
 ```
@@ -305,8 +336,10 @@ subdiretório. Após enviar, a interface mostra a raiz para exibir o novo arquiv
 ## Download
 
 ```bash
-curl http://<ip-da-maquina>:3000/files/download/documento.pdf
-curl http://<ip-da-maquina>:3000/files/download/Faculdade%2FJaneiro%2Fdocumento.pdf
+curl -H "X-Peer-Id: <id-do-solicitante-cadastrado>" \
+  http://<ip-da-maquina>:3000/files/download/documento.pdf
+curl -H "X-Peer-Id: <id-do-solicitante-cadastrado>" \
+  http://<ip-da-maquina>:3000/files/download/Faculdade%2FJaneiro%2Fdocumento.pdf
 ```
 
 O parâmetro de `/files/download/:path` é o caminho relativo completo, codificado

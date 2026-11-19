@@ -10,20 +10,23 @@ import cors from "cors";
 import identityRoute from "../controller/routes/identity.js";
 import network from "../model/Network.js";
 
-async function isolatedPeer(t, identity) {
+async function isolatedPeer(t, identity, csv) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "passa-arquivo-identity-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   t.mock.method(network, "obtainCidrs", () => {});
   t.mock.method(network, "getIps", () => ["192.168.1.10"]);
   // Copia o Model para testar a persistência sem tocar na identidade do desenvolvedor.
   const source = (await readFile(new URL("../model/Peer.js", import.meta.url), "utf8"))
-    .replace('"./Network.js"', JSON.stringify(new URL("../model/Network.js", import.meta.url).href));
+    .replace('"./Network.js"', JSON.stringify(new URL("../model/Network.js", import.meta.url).href))
+    .replace('"../controller/peers.csv"', '"./peers.csv"');
   const moduleUrl = pathToFileURL(path.join(directory, "Peer.mjs"));
   const file = path.join(directory, "identity.json");
+  const peersFile = path.join(directory, "peers.csv");
   await writeFile(moduleUrl, source);
   if (identity !== undefined) await writeFile(file, JSON.stringify(identity));
+  if (csv !== undefined) await writeFile(peersFile, csv);
   const { default: Peer } = await import(moduleUrl.href);
-  return { Peer, file, moduleUrl };
+  return { Peer, file, peersFile, moduleUrl };
 }
 
 test("Peer inicia sem nome, relê o JSON e persiste somente a mudança de nome", async (t) => {
@@ -35,6 +38,7 @@ test("Peer inicia sem nome, relê o JSON e persiste somente a mudança de nome",
   assert.equal(peer.ip, "192.168.1.10");
   assert.match(peer.id, /^[0-9a-f-]{36}$/);
   assert.equal(new Peer(), peer);
+  assert.deepEqual(peer.getPeers(), [{ ...initial, nome: "" }]);
 
   const external = { nome: "Notebook", ip: "192.168.1.20", id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a", extra: "preservado" };
   await writeFile(file, JSON.stringify(external));
@@ -44,6 +48,7 @@ test("Peer inicia sem nome, relê o JSON e persiste somente a mudança de nome",
   peer.nome = "MeuPC";
   assert.deepEqual(JSON.parse(await readFile(file, "utf8")), { ...external, nome: "MeuPC" });
   assert.deepEqual(peer.toJSON(), { nome: "MeuPC", ip: external.ip, id: external.id });
+  assert.deepEqual(peer.getPeers()[0], peer.toJSON());
   assert.throws(() => { peer.id = initial.id; }, TypeError);
 
   const before = await readFile(file, "utf8");
@@ -58,6 +63,56 @@ test("Peer inicia sem nome, relê o JSON e persiste somente a mudança de nome",
   assert.equal(restarted.nome, "MeuPC");
   assert.equal(restarted.id, external.id);
   assert.equal(restarted.ip, "192.168.1.10");
+  assert.deepEqual(restarted.getPeers()[0], restarted.toJSON());
+});
+
+const local = { nome: "MeuPC", ip: "192.168.1.20", id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a" };
+const first = { nome: "Primeiro", ip: "192.168.1.30", id: "4d53c0cc-0c19-417f-a71a-fd2adb8fcbca" };
+const last = { nome: 'PC,"dois"', ip: "192.168.1.40", id: "4b4f27f4-0432-4b39-867f-7737f61d4250" };
+const csvOf = (peers) => "nome,ip,id\n" + peers.map((peer) =>
+  [peer.nome, peer.ip, peer.id].map((value) => `"${value.replaceAll('"', '""')}"`).join(",") + "\n",
+).join("");
+
+test("instanciação move o primeiro registro divergente ao final sem duplicar o próprio id", async (t) => {
+  const { Peer, file, peersFile } = await isolatedPeer(t, local, csvOf([first, last, { ...local, nome: "Antigo" }]));
+  const peer = new Peer();
+  const current = { ...local, ip: "192.168.1.10" };
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")), current);
+  assert.deepEqual(peer.getPeers(), [current, last, first]);
+  assert.equal(await readFile(peersFile, "utf8"), csvOf([current, last, first]));
+  peer.nome = 'Novo,"PC"';
+  assert.deepEqual(peer.getPeers(), [{ ...current, nome: 'Novo,"PC"' }, last, first]);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).nome, 'Novo,"PC"');
+});
+
+test("instanciação atualiza nome e IP do primeiro registro correto e mantém a ordem dos demais", async (t) => {
+  const { Peer } = await isolatedPeer(t, local, csvOf([{ ...local, nome: "Antigo" }, first, last]));
+  const peer = new Peer();
+  const current = { ...local, ip: "192.168.1.10" };
+  assert.deepEqual(peer.getPeers(), [current, first, last]);
+  peer.savePeer({ ...current, nome: "Remoto", ip: "192.168.1.99" });
+  assert.deepEqual(peer.getPeers()[0], current, "A descoberta não sobrescreve a identidade local");
+  assert.throws(() => peer.removePeer(peer.id), TypeError);
+  assert.throws(() => peer.updatePeer(peer.id, { ip: "192.168.1.99" }), TypeError);
+  assert.equal(peer.updatePeer(first.id, { nome: "OutroPC" }), true);
+  assert.equal(peer.removePeer(first.id), true);
+  assert.deepEqual(peer.getPeers(), [current, last]);
+});
+
+test("isRegistered consulta UUIDs completos, trata ausência e sai antes de ler registros seguintes", async (t) => {
+  const { Peer, peersFile } = await isolatedPeer(t, local, csvOf([local, first, last]));
+  const peer = new Peer();
+  for (const id of [local.id, first.id, last.id]) assert.equal(await peer.isRegistered(id), true);
+  for (const id of [undefined, null, "", "inválido", local.id.slice(0, 8), "6d895d28-3105-4ab0-902a-2bb6e6bc7d65"]) {
+    assert.equal(await peer.isRegistered(id), false);
+  }
+  await writeFile(peersFile, csvOf([last]).replaceAll("\n", "\r\n") + "registro inválido\r\n".repeat(10000));
+  assert.equal(await peer.isRegistered(last.id), true, "early exit ignora o restante do CSV após encontrar o id");
+  await assert.rejects(peer.isRegistered(local.id), /registro|Registro/);
+  await writeFile(peersFile, "cabeçalho inválido\n" + csvOf([local]));
+  await assert.rejects(peer.isRegistered(local.id), /Cabeçalho/);
+  await rm(peersFile);
+  assert.equal(await peer.isRegistered(local.id), false);
 });
 
 test("identidade salva sem nome mantém seu UUID; identidade inválida não é sobrescrita", async (t) => {
@@ -139,6 +194,7 @@ test("GET / lê a identidade; POST / exige Vite local e altera apenas nome", asy
     assert.deepEqual(await saved.json(), expected);
     assert.deepEqual(await (await fetch(url)).json(), expected);
     assert.deepEqual(JSON.parse(await readFile(file, "utf8")), expected);
+    assert.deepEqual(peer.getPeers()[0], expected);
   }
 
   await rm(file);

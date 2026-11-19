@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createReadStream, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isIPv4 } from "node:net";
+import { createInterface } from "node:readline";
 import network from "./Network.js";
 
 const IDENTITY_FILE = new URL("./identity.json", import.meta.url);
@@ -29,11 +30,12 @@ function validateIp(ip) {
   }
 }
 
-function validatePeer(peer) {
+function validatePeer(peer, allowEmptyName = false) {
   if (!peer || typeof peer !== "object" || Array.isArray(peer)) {
     throw new TypeError("Informe uma identidade com nome, ip e id.");
   }
-  validateNome(peer.nome);
+  // O registro local pode ser salvo antes de o usuário escolher um nome.
+  if (!allowEmptyName || peer.nome !== "") validateNome(peer.nome);
   validateId(peer.id);
   validateIp(peer.ip);
 }
@@ -101,13 +103,24 @@ export default class Peer {
     this.#nome = current.nome;
     this.#ip = current.ip;
     this.#id = current.id;
-    writeFile(IDENTITY_FILE, `${JSON.stringify(current, null, 2)}\n`);
+    this.#saveIdentity(current);
     Object.freeze(this);
     Peer.#instance = this;
   }
 
   #readIdentity() {
     return JSON.parse(readFileSync(IDENTITY_FILE, "utf8"));
+  }
+
+  #saveIdentity(identity) {
+    const peers = this.getPeers();
+    const first = peers.shift();
+    // O primeiro registro divergente é preservado no fim do cadastro.
+    if (first && first.id !== identity.id) peers.push(first);
+    const others = peers.filter((peer) => peer.id !== identity.id);
+    const local = { nome: identity.nome ?? "", ip: identity.ip, id: identity.id };
+    writeFile(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`);
+    this.#writePeers([local, ...others]);
   }
 
   get nome() {
@@ -118,7 +131,7 @@ export default class Peer {
   set nome(value) {
     validateNome(value);
     const identity = { ...this.#readIdentity(), nome: value };
-    writeFile(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`);
+    this.#saveIdentity(identity);
     this.#nome = value;
   }
 
@@ -139,7 +152,7 @@ export default class Peer {
 
   /** Retorna registros simples; somente esta máquina é uma instância de Peer. */
   getPeers() {
-    const csv = readFile(PEERS_FILE, `${HEADER}\n`);
+    const csv = readFile(PEERS_FILE, "") || `${HEADER}\n`;
     const lines = csv.replace(/\r?\n$/, "").split(/\r?\n/);
     if (lines.shift() !== HEADER) {
       throw new Error(`Cabeçalho esperado em peers.csv: ${HEADER}.`);
@@ -147,11 +160,44 @@ export default class Peer {
     const peers = lines.map(parseRow);
     const ids = new Set();
     for (const peer of peers) {
-      validatePeer(peer);
+      validatePeer(peer, true);
       if (ids.has(peer.id)) throw new Error("Há ids duplicados em peers.csv.");
       ids.add(peer.id);
     }
     return peers;
+  }
+
+  /** Consulta o cadastro linha a linha, sem carregar todo o CSV na memória. */
+  async isRegistered(id) {
+    try {
+      validateId(id);
+    } catch {
+      return false;
+    }
+
+    const input = createReadStream(PEERS_FILE, { encoding: "utf8" });
+    const lines = createInterface({ input, crlfDelay: Infinity });
+    try {
+      let isHeader = true;
+      for await (const line of lines) {
+        if (isHeader) {
+          if (line !== HEADER) throw new Error(`Cabeçalho esperado em peers.csv: ${HEADER}.`);
+          isHeader = false;
+          continue;
+        }
+        const peer = parseRow(line);
+        validatePeer(peer, true);
+        if (peer.id === id) return true; // early exit: encontrou, não precisa percorrer os demais.
+      }
+      return false;
+    } catch (error) {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    } finally {
+      // O return antecipado também passa aqui e encerra a leitura do arquivo.
+      lines.close();
+      input.destroy();
+    }
   }
 
   #writePeers(peers) {
@@ -175,6 +221,8 @@ export default class Peer {
   /** Na descoberta, um id conhecido conserva seu nome e atualiza apenas o IP. */
   savePeer(peer) {
     validatePeer(peer);
+    // A descoberta não altera os dados da própria máquina.
+    if (peer.id === this.id) return;
     const peers = this.getPeers();
     const existing = peers.find((item) => item.id === peer.id);
     if (existing) {
@@ -189,6 +237,7 @@ export default class Peer {
   /** Atualiza somente nome e/ou ip; retorna false quando o id não existe. */
   updatePeer(id, changes) {
     validateId(id);
+    if (id === this.id) throw new TypeError("Use o setter nome para alterar a identidade local.");
     if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
         Object.keys(changes).some((column) => !["nome", "ip"].includes(column))) {
       throw new TypeError("Somente as colunas nome e ip podem ser modificadas.");
@@ -205,6 +254,7 @@ export default class Peer {
 
   removePeer(id) {
     validateId(id);
+    if (id === this.id) throw new TypeError("O próprio Peer não pode ser removido do cadastro.");
     const peers = this.getPeers();
     const remaining = peers.filter((peer) => peer.id !== id);
     if (remaining.length === peers.length) return false;

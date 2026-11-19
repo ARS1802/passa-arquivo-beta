@@ -5,9 +5,10 @@ function base64ToBlob(data, mimeType) {
   return new Blob([bytes], { type: mimeType });
 }
 
-export async function downloadFile(apiUrl, filePath) {
+export async function downloadFile(apiUrl, filePath, peerId) {
   const response = await fetch(
     `${apiUrl}/files/download/${encodeURIComponent(filePath)}`,
+    { headers: { "X-Peer-Id": peerId } },
   );
 
   if (!response.ok) {

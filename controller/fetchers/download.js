@@ -5,9 +5,9 @@ function base64ToBlob(data, mimeType) {
   return new Blob([bytes], { type: mimeType });
 }
 
-export async function downloadFile(apiUrl, filename) {
+export async function downloadFile(apiUrl, filePath) {
   const response = await fetch(
-    `${apiUrl}/files/download/${encodeURIComponent(filename)}`,
+    `${apiUrl}/files/download/${encodeURIComponent(filePath)}`,
   );
 
   if (!response.ok) {

@@ -1,5 +1,6 @@
-export async function listFiles(apiUrl) {
-  const response = await fetch(`${apiUrl}/files`);
+export async function listFiles(apiUrl, directoryPath = "") {
+  const query = directoryPath ? `?path=${encodeURIComponent(directoryPath)}` : "";
+  const response = await fetch(`${apiUrl}/files${query}`);
 
   if (!response.ok) {
     let message = `Não foi possível listar os arquivos (${response.status}).`;
@@ -18,6 +19,8 @@ export async function listFiles(apiUrl) {
 
   if (
     !result ||
+    !Array.isArray(result.directories) ||
+    !result.directories.every((directory) => directory && typeof directory.name === "string") ||
     !Array.isArray(result.files) ||
     !result.files.every(
       (file) =>
@@ -31,9 +34,9 @@ export async function listFiles(apiUrl) {
     )
   ) {
     throw new Error(
-      "A resposta da API não contém uma lista de arquivos válida.",
+      "A resposta da API não contém uma lista de arquivos e diretórios válida.",
     );
   }
 
-  return result.files;
+  return result;
 }

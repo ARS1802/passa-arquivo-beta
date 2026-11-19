@@ -104,14 +104,15 @@
   "downloadUrl": "/files/download/documento.pdf"
 }</pre>
         <p>O tamanho máximo é 100 MiB. Arquivos existentes não são sobrescritos.</p>
+        <p>Uploads continuam sendo salvos na raiz de <code>SHARED_DIR</code>, independentemente da pasta exibida na interface.</p>
         <p>Possíveis erros: <code>400</code> (dados inválidos), <code>409</code> (arquivo existente) e <code>413</code> (arquivo grande).</p>
       </section>
 
       <section>
         <h2>Download</h2>
-        <p><strong>GET /files/download/:filename</strong></p>
-        <p>Substitua <code>:filename</code> pelo nome do arquivo:</p>
-        <pre>GET /files/download/documento.pdf</pre>
+        <p><strong>GET /files/download/:path</strong></p>
+        <p>Substitua <code>:path</code> pelo caminho relativo à raiz compartilhada, codificado com <code>encodeURIComponent</code>:</p>
+        <pre>GET /files/download/Faculdade%2FJaneiro%2Fdocumento.pdf</pre>
         <p>Resposta de sucesso (<code>200 OK</code>):</p>
         <pre>{
   "filename": "documento.pdf",
@@ -119,13 +120,13 @@
   "data": "&lt;conteudo-em-base64&gt;",
   "size": 12345
 }</pre>
-        <p>Possíveis erros: <code>400</code> (nome inválido) e <code>404</code> (arquivo não encontrado).</p>
+        <p>Possíveis erros: <code>400</code> (caminho inválido ou diretório), <code>403</code> (acesso fora da raiz ou sem permissão) e <code>404</code> (arquivo não encontrado).</p>
       </section>
 
       <section>
         <h2>Listagem</h2>
-        <p><strong>GET /files</strong></p>
-        <p>Retorna os arquivos disponíveis:</p>
+        <p><strong>GET /files?path=Faculdade%2FJaneiro</strong></p>
+        <p>O parâmetro opcional <code>path</code> contém apenas o caminho relativo. Sem ele, ou com valor vazio, lista a raiz compartilhada. Retorna os arquivos e subdiretórios imediatos da pasta solicitada:</p>
         <pre>{
   "files": [
     {
@@ -134,14 +135,17 @@
       "size": 12345,
       "lastModified": "2026-11-03T10:00:00.000Z"
     }
-  ]
+  ],
+  "directories": [{ "name": "Trabalhos" }]
 }</pre>
+        <p>A rota usa <code>Directory.resolvePath()</code> para resolver o caminho completo. Caminhos absolutos, segmentos <code>..</code> e links para fora da raiz são bloqueados. Links simbólicos não aparecem na listagem.</p>
+        <p>Possíveis erros: <code>400</code> (caminho inválido ou arquivo), <code>403</code> (acesso fora da raiz ou sem permissão) e <code>404</code> (diretório não encontrado).</p>
       </section>
 
       <section>
         <h2>Regras gerais</h2>
         <dl>
-          <dt>Nome do arquivo</dt>
+          <dt>Nome do arquivo no upload</dt>
           <dd>Deve começar com uma letra ou número e conter apenas letras, números, ponto, hífen ou sublinhado.</dd>
           <dt>Conteúdo</dt>
           <dd>O campo <code>data</code> deve ser uma string Base64 válida.</dd>

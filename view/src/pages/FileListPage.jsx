@@ -12,19 +12,32 @@ function FileListPage({ localName, onNamed }) {
   const [showSelectDir, setShowSelectDir] = useState(true);
   const [showNaming, setShowNaming] = useState(false);
   const [files, setFiles] = useState([]);
+  const [directories, setDirectories] = useState([]);
+  const [directoryPath, setDirectoryPath] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleFetchFiles() {
+  async function handleFetchFiles(nextPath = directoryPath) {
     setLoading(true);
     setError("");
 
     try {
-      setFiles(await api.listFiles());
+      const result = await api.listFiles(nextPath);
+      setFiles(result.files);
+      setDirectories(result.directories);
+      setDirectoryPath(nextPath);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDownload(filename) {
+    try {
+      await api.downloadFile(directoryPath ? `${directoryPath}/${filename}` : filename);
+    } catch (requestError) {
+      setError(requestError.message);
     }
   }
 
@@ -67,6 +80,8 @@ function FileListPage({ localName, onNamed }) {
             variant="outline-secondary"
             onClick={() => {
               setFiles([]);
+              setDirectories([]);
+              setDirectoryPath("");
               setError("");
               setShowSelectDir(true);
             }}
@@ -81,6 +96,8 @@ function FileListPage({ localName, onNamed }) {
             onClick={() => {
               // Arquivos do alvo anterior não podem aparecer como se fossem do novo.
               setFiles([]);
+              setDirectories([]);
+              setDirectoryPath("");
               setError("");
               setShowApiUrlPage(true);
             }}
@@ -91,14 +108,40 @@ function FileListPage({ localName, onNamed }) {
           </Button>
           <Button
             type="button"
-            onClick={handleFetchFiles}
+            onClick={() => handleFetchFiles()}
             disabled={loading || !api.targetPeer}
             className="mb-3"
           >
             {loading ? "Carregando..." : "Buscar arquivos"}
           </Button>
-          <FileUploadButton onUploaded={handleFetchFiles} />
-          <DataView data={files} loading={loading} error={error} />
+          <FileUploadButton onUploaded={() => handleFetchFiles("")} />
+          <p className="mb-2">Pasta atual: <strong>{directoryPath || "Raiz compartilhada"}</strong></p>
+          <Button
+            type="button"
+            variant="outline-secondary"
+            onClick={() => handleFetchFiles("")}
+            disabled={loading || !api.targetPeer || !directoryPath}
+            className="mb-3 me-2"
+          >
+            Raiz
+          </Button>
+          <Button
+            type="button"
+            variant="outline-secondary"
+            onClick={() => handleFetchFiles(directoryPath.split("/").slice(0, -1).join("/"))}
+            disabled={loading || !api.targetPeer || !directoryPath}
+            className="mb-3"
+          >
+            Voltar
+          </Button>
+          <DataView
+            data={files}
+            directories={directories}
+            loading={loading}
+            error={error}
+            onOpenDirectory={(name) => handleFetchFiles(directoryPath ? `${directoryPath}/${name}` : name)}
+            onDownload={handleDownload}
+          />
         </Card.Body>
       </Card>
     </Container>

@@ -3,6 +3,7 @@
 !/test/peers-route.test.js
 !/test/dir-route.test.js
 !/test/identity-route.test.js
+!/test/files-routes.test.js
 /.env
 /node_modules
 AGENTS.md

@@ -7,8 +7,8 @@
  * DELETE /peer/:id - exclui um peer salvo, somente para o Vite local.
  * GET /dir e POST /dir - consultam e alteram SHARED_DIR, somente para o Vite local.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
- * GET /files/download/:filename - retorna o arquivo em Base64.
- * GET /files - lista os arquivos compartilhados.
+ * GET /files/download/:path - recebe o caminho relativo codificado e retorna o arquivo em Base64.
+ * GET /files?path=Faculdade%2FJaneiro - lista arquivos e pastas desse nível; sem path, lista a raiz.
  */
 import express from "express";
 import cors from "cors";
@@ -51,14 +51,14 @@ app.get("/api", (_request, response) => {
 app.use("/files", uploadRoute());
 app.use("/files", downloadRoute());
 app.use("/files", listRoute());
-app.use((error, request, response) => {
+app.use((error, _request, response, _next) => {
   if (error.type === "entity.too.large") {
     return response
       .status(413)
       .json({ error: "Arquivo excede o limite de 100 MB." });
   }
 
-  if (error.status === 409) {
+  if ([400, 403, 409].includes(error.status)) {
     return response.status(error.status).json({ error: error.message });
   }
 

@@ -57,7 +57,7 @@ function FileUploadButton({ onUploaded }) {
         disabled={uploading || !api.targetPeer}
         className="mb-3 ms-2"
       >
-        {uploading ? "Enviando..." : "Enviar arquivo"}
+        {uploading ? "Enviando..." : "Enviar arquivo à raiz"}
       </Button>
       <input
         ref={inputRef}

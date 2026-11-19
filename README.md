@@ -40,7 +40,11 @@ handle e o nome da pasta, mas não seu caminho absoluto. Por isso, informe o
 O picker não envia arquivos nem inicia processos no servidor.
 
 `model/Directory.js` concentra a consulta, validação e atualização de `SHARED_DIR`
-nos métodos estáticos `getSharedDir()` e `setSharedDir()`.
+nos métodos estáticos `getSharedDir()` e `setSharedDir()`. Cada instância de
+`Directory` representa uma pasta pelo seu `name`. O método estático
+`resolvePath(relativePath = "")` resolve caminhos de arquivos e subdiretórios
+a partir de `SHARED_DIR`, sem alterar a raiz compartilhada. Ele rejeita caminhos
+absolutos, segmentos `..` e links simbólicos que levem para fora dessa raiz.
 
 Todas as rotas abaixo usam `network.requireLocalVite`, o mesmo middleware de
 consulta e exclusão de peers. A conexão e a origem devem pertencer ao Vite local,
@@ -84,8 +88,9 @@ máquina mantém os CIDRs de onde foi gerada; `npm run preview` não os atualiza
 
 `model/File.js` contém a classe `File` utilizada pelas rotas de upload, download
 e listagem da API. Ela representa o conteúdo com `Buffer` e oferece conversão
-entre esse conteúdo e Base64. As rotas de upload e download verificam os nomes
-recebidos com `File.isValidFilename`.
+entre esse conteúdo e Base64. O upload verifica os nomes recebidos com
+`File.isValidFilename`. O download usa `Directory.resolvePath()` para validar
+o caminho relativo, permitindo baixar também arquivos existentes com espaços e acentos.
 
 A interface em `view/` envia e recebe objetos JSON por HTTP, sem instanciar essa
 classe. Os módulos de `controller/fetchers/` fazem as requisições e tratam suas respostas.
@@ -204,7 +209,9 @@ const discovered = await api.discoverPeers(); // Descobre e salva, sem seleciona
 const saved = await api.getPeer(); // Array de todos os Peers cadastrados na API local.
 const peer = await api.getPeer({ nome: "OutroPC" }); // Objeto ou null.
 await api.selectPeer({ id: peer.id }); // Seleciona somente esse dispositivo.
-const files = await api.listFiles();
+const { files, directories } = await api.listFiles(); // Conteúdo da raiz.
+const january = await api.listFiles("Faculdade/Janeiro");
+await api.downloadFile("Faculdade/Janeiro/documento.pdf");
 await api.setPeerAtLocalStorage(peer.id);
 api.removePeerAtLocalStorage(peer.id); // Remove somente a cópia no navegador.
 await api.deletePeer(peer.id); // Exclui do cadastro local e do cache.
@@ -231,7 +238,9 @@ do Node.js e representa apenas a máquina local. A View não instancia essa clas
 
 `npm test` verifica os fetchers, a descoberta com rede simulada, o cache, a seleção,
 as restrições locais de peers e diretórios, a identidade sem nome e sua atualização,
-e a troca de pasta nas operações de arquivos.
+e a troca de pasta nas operações de arquivos. Também verifica a navegação por
+subdiretórios, downloads aninhados, codificação de caminhos e bloqueio de acesso
+fora da raiz compartilhada.
 
 ## CORS
 
@@ -241,6 +250,41 @@ origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST`,
 consultas prévias do navegador (preflight) com status `204`.
 `POST /`, `GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
 descrita acima e só liberam a origem local aceita; o CORS geral não concede acesso a essas rotas.
+
+## Listagem e navegação
+
+Compartilhar uma pasta disponibiliza seus subdiretórios. Cada listagem retorna
+somente o conteúdo imediato do nível solicitado, sem percorrer toda a árvore:
+
+```http
+GET /files
+GET /files?path=Faculdade
+GET /files?path=Faculdade%2FJaneiro
+```
+
+`path` é opcional: ausente ou vazio, representa a raiz compartilhada. O fetcher
+recebe apenas o caminho relativo (`api.listFiles("Faculdade/Janeiro")`) e cuida
+da codificação da URL. A rota usa `Directory.resolvePath()` para obter o caminho
+completo no servidor. A resposta e o retorno do fetcher têm este formato:
+
+```json
+{
+  "files": [
+    {
+      "filename": "documento.pdf",
+      "mimeType": "application/octet-stream",
+      "size": 12345,
+      "lastModified": "2026-11-18T12:00:00.000Z"
+    }
+  ],
+  "directories": [{ "name": "Trabalhos" }]
+}
+```
+
+A interface abre pastas ao clicar e oferece **Voltar** e **Raiz**. Ao trocar de
+Peer, reinicia a navegação na raiz. Links simbólicos não aparecem na listagem.
+Caminhos inválidos ou que apontam para um arquivo retornam `400`; caminhos
+inexistentes, `404`; tentativas de sair da raiz ou falta de permissão, `403`.
 
 ## Upload
 
@@ -255,14 +299,21 @@ curl -X POST \
 
 O endpoint retorna `201` com o nome, o tamanho e a URL de download. Arquivos
 maiores que 100 MB são rejeitados e um arquivo existente não é sobrescrito.
+O destino continua sendo `SHARED_DIR`, mesmo enquanto a interface exibe um
+subdiretório. Após enviar, a interface mostra a raiz para exibir o novo arquivo.
 
 ## Download
 
 ```bash
 curl http://<ip-da-maquina>:3000/files/download/documento.pdf
+curl http://<ip-da-maquina>:3000/files/download/Faculdade%2FJaneiro%2Fdocumento.pdf
 ```
 
-A resposta contém `filename`, `size` e `data` em Base64.
+O parâmetro de `/files/download/:path` é o caminho relativo completo, codificado
+com `encodeURIComponent`. O fetcher faz isso ao receber
+`api.downloadFile("Faculdade/Janeiro/documento.pdf")`. A rota resolve o caminho
+com `Directory.resolvePath()` e retorna `filename` (somente o nome do arquivo),
+`mimeType`, `size` e `data` em Base64. Diretórios não podem ser baixados como arquivos.
 
 ## Estrutura
 

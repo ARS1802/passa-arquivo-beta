@@ -116,7 +116,7 @@ test("seleção é explícita e direciona listagem, upload e download para um ú
   t.mock.method(globalThis, "fetch", async (url, options) => {
     requests.push({ url, options });
     if (url === `${localUrl}/peer`) return Response.json({ peers: [first, second] });
-    if (url.endsWith("/files")) return Response.json({ files: [] });
+    if (url.endsWith("/files")) return Response.json({ files: [], directories: [] });
     return Response.json({ filename: "olá.txt", mimeType: "text/plain", data: "b2k=" });
   });
   assert.equal(api.targetPeer, null);
@@ -147,6 +147,43 @@ test("seleção é explícita e direciona listagem, upload e download para um ú
   assert.deepEqual(api.targetPeer, second);
   await assert.rejects(api.selectPeer({ id: "ausente" }), /não encontrado/);
   assert.deepEqual(api.targetPeer, second);
+});
+
+test("fetchers enviam somente o caminho relativo e preservam arquivos e diretórios", async (t) => {
+  const api = new API();
+  api.targetPeer = first;
+  const directoryPath = "Faculdade/Revisão & notas #1%";
+  const filename = "anotações.txt";
+  const listing = {
+    directories: [{ name: "Janeiro" }],
+    files: [{ filename, mimeType: "text/plain", size: 2, lastModified: "2026-11-18T12:00:00.000Z" }],
+  };
+  let savedName;
+  setGlobal(t, "document", {
+    createElement: () => ({ click() { savedName = this.download; }, remove() {} }),
+    body: { appendChild() {} },
+  });
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    requests.push(url);
+    if (url.includes("/download/")) return Response.json({ filename, mimeType: "text/plain", data: "b2k=" });
+    return Response.json(listing);
+  });
+  assert.deepEqual(await api.listFiles(directoryPath), listing);
+  await api.downloadFile(`${directoryPath}/${filename}`);
+  assert.deepEqual(requests, [
+    `${api.targetPeerURL}/files?path=${encodeURIComponent(directoryPath)}`,
+    `${api.targetPeerURL}/files/download/${encodeURIComponent(`${directoryPath}/${filename}`)}`,
+  ]);
+  assert.equal(savedName, filename);
+
+  for (const invalid of [null, { files: [] }, { files: [], directories: [{}] }, { files: [{}], directories: [] }]) {
+    t.mock.method(globalThis, "fetch", async () => Response.json(invalid));
+    await assert.rejects(api.listFiles(), /lista de arquivos e diretórios válida/);
+  }
+  t.mock.method(globalThis, "fetch", async () => Response.json({ error: "Acesso fora do diretório compartilhado." }, { status: 403 }));
+  await assert.rejects(api.listFiles(".."), /Acesso fora/);
+  await assert.rejects(api.downloadFile("../privado.txt"), /Acesso fora/);
 });
 
 test("localStorage guarda objetos por id, atualiza IP e remove somente o Peer pedido", async (t) => {

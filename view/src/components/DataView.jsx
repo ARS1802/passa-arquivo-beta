@@ -1,8 +1,7 @@
 import { Alert, Col, ListGroup, Row, Spinner } from "react-bootstrap";
-import api from "../../../controller/fetchers/API.js";
 import FileItem from "./FileItem.jsx";
 
-function DataView({ data, loading, error }) {
+function DataView({ data, directories, loading, error, onOpenDirectory, onDownload }) {
   if (loading) {
     return (
       <div className="text-center p-4">
@@ -17,8 +16,8 @@ function DataView({ data, loading, error }) {
     return <Alert variant="danger">{error}</Alert>;
   }
 
-  if (data.length === 0) {
-    return <Alert variant="secondary">Nenhum arquivo encontrado.</Alert>;
+  if (data.length === 0 && directories.length === 0) {
+    return <Alert variant="secondary">Nenhum arquivo ou diretório encontrado.</Alert>;
   }
 
   return (
@@ -28,14 +27,30 @@ function DataView({ data, loading, error }) {
           <Col>Nome</Col>
           <Col>Tamanho</Col>
           <Col>Última modificação</Col>
-          <Col>MIME type</Col>
+          <Col>Tipo</Col>
         </Row>
       </ListGroup.Item>
+      {directories.map((directory) => (
+        <ListGroup.Item
+          key={`directory:${directory.name}`}
+          action
+          as="button"
+          type="button"
+          onClick={() => onOpenDirectory(directory.name)}
+        >
+          <Row>
+            <Col>{directory.name}/</Col>
+            <Col>—</Col>
+            <Col>—</Col>
+            <Col>Pasta</Col>
+          </Row>
+        </ListGroup.Item>
+      ))}
       {data.map((file) => (
         <FileItem
           key={file.filename}
           file={file}
-          onClick={() => api.downloadFile(file.filename)}
+          onClick={() => onDownload(file.filename)}
         />
       ))}
     </ListGroup>

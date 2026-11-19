@@ -53,7 +53,7 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
   });
 
   assert.deepEqual(await (await fetch(`${base}/dir`, { headers })).json(), { SHARED_DIR: null });
-  assert.equal((await fetch(`${base}/files`)).status, 409);
+  assert.equal((await fetch(`${base}/files/list/`)).status, 409);
   assert.equal((await fetch(`${base}/files/download/primeiro.txt`)).status, 409);
   assert.equal((await upload()).status, 409);
 
@@ -96,9 +96,9 @@ test("diretório compartilhado é validado, exclusivo do Vite local e atualizado
     }
   });
 
-  assert.deepEqual((await (await fetch(`${base}/files`)).json()).files.map((file) => file.filename), ["primeiro.txt"]);
+  assert.deepEqual((await (await fetch(`${base}/files/list/`)).json()).files.map((file) => file.filename), ["primeiro.txt"]);
   assert.equal((await update(second)).status, 200);
-  assert.deepEqual((await (await fetch(`${base}/files`)).json()).files.map((file) => file.filename), ["segundo.txt"]);
+  assert.deepEqual((await (await fetch(`${base}/files/list/`)).json()).files.map((file) => file.filename), ["segundo.txt"]);
   assert.equal((await fetch(`${base}/files/download/primeiro.txt`)).status, 404);
   assert.equal((await (await fetch(`${base}/files/download/segundo.txt`)).json()).data, Buffer.from("segundo").toString("base64"));
   assert.equal((await upload()).status, 201);

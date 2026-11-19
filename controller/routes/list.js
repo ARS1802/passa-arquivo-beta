@@ -1,6 +1,6 @@
 /*
  * Requisição esperada:
- * GET /files?path=Faculdade%2FJaneiro (sem path, lista a raiz compartilhada)
+ * GET /files/list/Faculdade%2FJaneiro (/files/list/ lista a raiz compartilhada)
  * Corpo: nenhum.
  *
  * Resposta:
@@ -15,9 +15,9 @@ import Directory from "../../model/Directory.js";
 export default function listRoute() {
   const router = Router();
 
-  router.get("/", async (request, response, next) => {
+  router.get("/list{/:path}", async (request, response, next) => {
     try {
-      const directoryPath = await Directory.resolvePath(request.query.path);
+      const directoryPath = await Directory.resolvePath(request.params.path);
       const entries = await readdir(directoryPath, { withFileTypes: true });
       const directories = entries
         .filter((entry) => entry.isDirectory())

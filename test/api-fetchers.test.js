@@ -116,7 +116,7 @@ test("seleção é explícita e direciona listagem, upload e download para um ú
   t.mock.method(globalThis, "fetch", async (url, options) => {
     requests.push({ url, options });
     if (url === `${localUrl}/peer`) return Response.json({ peers: [first, second] });
-    if (url.endsWith("/files")) return Response.json({ files: [], directories: [] });
+    if (url.endsWith("/files/list/")) return Response.json({ files: [], directories: [] });
     return Response.json({ filename: "olá.txt", mimeType: "text/plain", data: "b2k=" });
   });
   assert.equal(api.targetPeer, null);
@@ -136,7 +136,7 @@ test("seleção é explícita e direciona listagem, upload e download para um ú
   await api.downloadFile("olá.txt");
   const fileRequests = requests.filter(({ url }) => url !== `${localUrl}/peer`);
   assert.deepEqual(fileRequests.map(({ url }) => url), [
-    `http://${first.ip}:3000/files`,
+    `http://${first.ip}:3000/files/list/`,
     `http://${first.ip}:3000/files/upload`,
     `http://${first.ip}:3000/files/download/ol%C3%A1.txt`,
   ]);
@@ -172,7 +172,7 @@ test("fetchers enviam somente o caminho relativo e preservam arquivos e diretór
   assert.deepEqual(await api.listFiles(directoryPath), listing);
   await api.downloadFile(`${directoryPath}/${filename}`);
   assert.deepEqual(requests, [
-    `${api.targetPeerURL}/files?path=${encodeURIComponent(directoryPath)}`,
+    `${api.targetPeerURL}/files/list/${encodeURIComponent(directoryPath)}`,
     `${api.targetPeerURL}/files/download/${encodeURIComponent(`${directoryPath}/${filename}`)}`,
   ]);
   assert.equal(savedName, filename);

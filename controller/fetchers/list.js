@@ -1,6 +1,5 @@
 export async function listFiles(apiUrl, directoryPath = "") {
-  const query = directoryPath ? `?path=${encodeURIComponent(directoryPath)}` : "";
-  const response = await fetch(`${apiUrl}/files${query}`);
+  const response = await fetch(`${apiUrl}/files/list/${encodeURIComponent(directoryPath)}`);
 
   if (!response.ok) {
     let message = `Não foi possível listar os arquivos (${response.status}).`;

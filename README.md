@@ -257,9 +257,9 @@ Compartilhar uma pasta disponibiliza seus subdiretórios. Cada listagem retorna
 somente o conteúdo imediato do nível solicitado, sem percorrer toda a árvore:
 
 ```http
-GET /files
-GET /files?path=Faculdade
-GET /files?path=Faculdade%2FJaneiro
+GET /files/list/
+GET /files/list/Faculdade
+GET /files/list/Faculdade%2FJaneiro
 ```
 
 `path` é opcional: ausente ou vazio, representa a raiz compartilhada. O fetcher

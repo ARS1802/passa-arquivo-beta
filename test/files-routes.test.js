@@ -41,11 +41,11 @@ test("navega e baixa por caminhos relativos, mantendo o acesso dentro da pasta c
   t.after(() => new Promise((resolve) => server.close(resolve)));
   await once(server, "listening");
   const base = `http://127.0.0.1:${server.address().port}/files`;
-  const list = (directory = "") => fetch(`${base}?path=${encodeURIComponent(directory)}`);
+  const list = (directory = "") => fetch(`${base}/list/${encodeURIComponent(directory)}`);
   const download = (filePath) => fetch(`${base}/download/${encodeURIComponent(filePath)}`);
 
   await t.test("lista somente os arquivos e diretórios do nível solicitado", async () => {
-    const root = await (await fetch(base)).json();
+    const root = await (await list()).json();
     assert.deepEqual(root.directories, [{ name: "Faculdade" }]);
     assert.deepEqual(root.files.map((file) => file.filename), ["raiz.txt"]);
     assert.equal(root.files[0].size, 4);
@@ -89,7 +89,6 @@ test("navega e baixa por caminhos relativos, mantendo o acesso dentro da pasta c
       assert.equal((await list(relativePath)).status, 400, relativePath);
       assert.equal((await download(relativePath)).status, 400, relativePath);
     }
-    assert.equal((await fetch(`${base}?path=Faculdade&path=Janeiro`)).status, 400);
   });
 
   await t.test("distingue caminho inexistente, arquivo e diretório", async () => {

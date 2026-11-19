@@ -8,7 +8,7 @@
  * GET /dir e POST /dir - consultam e alteram SHARED_DIR, somente para o Vite local.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
  * GET /files/download/:path - recebe o caminho relativo codificado e retorna o arquivo em Base64.
- * GET /files?path=Faculdade%2FJaneiro - lista arquivos e pastas desse nível; sem path, lista a raiz.
+ * GET /files/list/Faculdade%2FJaneiro - lista arquivos e pastas desse nível; sem path, lista a raiz.
  */
 import express from "express";
 import cors from "cors";

@@ -1,20 +1,13 @@
-import { downloadFile } from "./download.js";
-import { discoverPeers as scanNetwork, isValidIpv4 } from "./discovery.js";
-import { listFiles } from "./list.js";
-import { uploadFile } from "./upload.js";
+import { downloadFile, listFiles, uploadFile } from "./files.js";
+import { discoverPeers as scanNetwork, isPeer, getPeers, deletePeer } from "./peers.js";
 import { getSharedDir, setSharedDir } from "./dir.js";
-import { getLocalIdentity, setLocalName } from "./naming.js";
+import { getLocalIdentity, setLocalName } from "./identity.js";
 
 // O cadastro pertence à máquina local, mesmo quando outro Peer está selecionado.
 const LOCAL_API_URL = import.meta.env.LOCAL_API_URL;
 
-function isPeer(peer) {
-  return peer && typeof peer === "object" && !Array.isArray(peer) &&
-    typeof peer.nome === "string" && peer.nome.trim() &&
-    typeof peer.id === "string" && peer.id.trim() && isValidIpv4(peer.ip);
-}
-
-export class API {
+// Coordena os fetchers das rotas e mantém a seleção e o cache usados pela View.
+export class Fetcher {
   constructor() {
     this.targetPeer = null;
     this.LOCAL_STORAGE_KEY = "passa-arquivo-peers";
@@ -125,15 +118,10 @@ export class API {
       throw new TypeError("Use nome, ip ou id com valores de texto não vazios.");
     }
 
-    const response = await fetch(`${LOCAL_API_URL}/peer`);
-    if (!response.ok) throw new Error(`Não foi possível obter os Peers (${response.status}).`);
-    const result = await response.json();
-    if (!result || !Array.isArray(result.peers) || !result.peers.every(isPeer)) {
-      throw new Error("A resposta da API não contém uma lista de Peers válida.");
-    }
-    if (entries.length === 0) return result.peers;
+    const peers = await getPeers(LOCAL_API_URL);
+    if (entries.length === 0) return peers;
 
-    const matches = result.peers.filter((peer) =>
+    const matches = peers.filter((peer) =>
       entries.every(([key, value]) => peer[key] === value),
     );
     if (matches.length > 1) throw new Error("Mais de um Peer corresponde ao filtro. Informe o id.");
@@ -153,12 +141,7 @@ export class API {
 
   async deletePeer(id) {
     if (typeof id !== "string" || !id.trim()) throw new TypeError("Informe o id do Peer.");
-    const response = await fetch(`${LOCAL_API_URL}/peer/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-    if (response.status !== 204) {
-      throw new Error(`Não foi possível excluir o Peer (${response.status}).`);
-    }
+    await deletePeer(LOCAL_API_URL, id);
     if (this.targetPeer?.id === id) this.targetPeer = null;
     this.removePeerAtLocalStorage(id);
   }
@@ -180,5 +163,5 @@ export class API {
   }
 }
 
-export const api = new API();
-export default api;
+export const fetcher = new Fetcher();
+export default fetcher;

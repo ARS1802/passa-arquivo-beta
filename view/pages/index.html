@@ -70,8 +70,8 @@
 
       <section>
         <h2>Nome deste Peer</h2>
-        <p><strong>GET /</strong> retorna a identidade local com <code>ip</code>, <code>id</code> e, quando escolhido, <code>nome</code>.</p>
-        <p><strong>POST /</strong> aceita somente a conexão e a origem do Vite local e altera apenas o nome:</p>
+        <p><strong>GET /identity</strong> retorna a identidade local com <code>ip</code>, <code>id</code> e, quando escolhido, <code>nome</code>.</p>
+        <p><strong>POST /identity</strong> aceita somente a conexão e a origem do Vite local e altera apenas o nome:</p>
         <pre>{ "nome": "MeuPC" }</pre>
         <p>Use de 1 a 15 caracteres, sem espaços. A resposta contém a identidade atualizada, preservando IP e UUID.</p>
         <p>Nomes inválidos ou campos adicionais retornam <code>400</code>; acesso fora do Vite local retorna <code>403</code>.</p>
@@ -91,7 +91,7 @@
         <h2>Acesso aos arquivos</h2>
         <p>Listagem, upload e download exigem o cabeçalho <code>X-Peer-Id</code> com o UUID do dispositivo solicitante cadastrado em <code>peers.csv</code>. Id ausente, inválido ou desconhecido retorna <code>403</code>.</p>
         <p>O primeiro registro do CSV pertence ao próprio dispositivo e acompanha as alterações do seu nome. Os fetchers enviam o ID local automaticamente. Para compartilhar entre dois dispositivos, execute a descoberta em ambos.</p>
-        <p>A verificação atual confere somente o cadastro do UUID; a identidade em <strong>GET /</strong> continua pública.</p>
+        <p>A verificação atual confere somente o cadastro do UUID; a identidade em <strong>GET /identity</strong> continua pública.</p>
       </section>
 
       <section>

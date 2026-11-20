@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Alert, Button } from "react-bootstrap";
-import api from "../../../controller/fetchers/API.js";
+import fetcher from "../../../controller/fetchers/Fetcher.js";
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -35,7 +35,7 @@ function FileUploadButton({ onUploaded }) {
     setError("");
 
     try {
-      await api.uploadFile({
+      await fetcher.uploadFile({
         filename: file.name,
         mimeType: file.type || "application/octet-stream",
         data: arrayBufferToBase64(await file.arrayBuffer()),
@@ -54,7 +54,7 @@ function FileUploadButton({ onUploaded }) {
         type="button"
         variant="success"
         onClick={handleButtonClick}
-        disabled={uploading || !api.targetPeer}
+        disabled={uploading || !fetcher.targetPeer}
         className="mb-3 ms-2"
       >
         {uploading ? "Enviando..." : "Enviar arquivo à raiz"}

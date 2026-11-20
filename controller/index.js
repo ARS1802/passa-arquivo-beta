@@ -1,7 +1,7 @@
 /*
  * Rotas da API:
- * GET / - retorna a identidade desta máquina.
- * POST / - altera somente o nome desta máquina, somente para o Vite local.
+ * GET /identity - retorna a identidade desta máquina.
+ * POST /identity - altera somente o nome desta máquina, somente para o Vite local.
  * GET /peer - lista peers cadastrados, somente para o Vite local.
  * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
  * DELETE /peer/:id - exclui um peer salvo, somente para o Vite local.
@@ -41,7 +41,7 @@ app.use(
     allowedHeaders: ["Content-Type", "X-Peer-Id"],
   }),
 );
-app.use("/", identityRoute(peer));
+app.use("/identity", identityRoute(peer));
 app.use("/peer", peersRoute(peer));
 app.use("/dir", dirRoute());
 app.get("/api", (_request, response) => {

@@ -1,7 +1,7 @@
 const DEFAULT_PORT = 3000;
 const DEFAULT_CONCURRENCY = 800;
 const DEFAULT_TIMEOUT = 10000;
-const DEFAULT_PATH = "/";
+const DEFAULT_PATH = "/identity";
 
 export function isValidIpv4(ip) {
   if (typeof ip !== "string") return false;
@@ -14,6 +14,31 @@ export function isValidIpv4(ip) {
       return /^\d+$/.test(octet) && value >= 0 && value <= 255;
     })
   );
+}
+
+export function isPeer(peer) {
+  return peer && typeof peer === "object" && !Array.isArray(peer) &&
+    typeof peer.nome === "string" && peer.nome.trim() &&
+    typeof peer.id === "string" && peer.id.trim() && isValidIpv4(peer.ip);
+}
+
+export async function getPeers(apiUrl) {
+  const response = await fetch(`${apiUrl}/peer`);
+  if (!response.ok) throw new Error(`Não foi possível obter os Peers (${response.status}).`);
+  const result = await response.json();
+  if (!result || !Array.isArray(result.peers) || !result.peers.every(isPeer)) {
+    throw new Error("A resposta da API não contém uma lista de Peers válida.");
+  }
+  return result.peers;
+}
+
+export async function deletePeer(apiUrl, id) {
+  const response = await fetch(`${apiUrl}/peer/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (response.status !== 204) {
+    throw new Error(`Não foi possível excluir o Peer (${response.status}).`);
+  }
 }
 
 function ipToNumber(ip) {
@@ -86,7 +111,7 @@ async function getIdentity(apiUrl, timeout, path, signal) {
 }
 
 async function saveIdentity(identity, timeout, signal) {
-  // O navegador entrega os dados à API local; somente Peer escreve no CSV.
+  // O fetcher entrega os dados à API local; somente Peer escreve no CSV.
   const response = await fetch(`${import.meta.env.LOCAL_API_URL}/peer`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -104,7 +129,7 @@ async function saveIdentity(identity, timeout, signal) {
 }
 
 /**
- * Procura identidades por GET em `path` (padrão "/") nas sub-redes locais
+ * Procura identidades por GET em `path` (padrão "/identity") nas sub-redes locais
  * na ordem recebida de Network e as salva na API local.
  * Sem sub-redes, retorna uma lista vazia.
  * @param {AbortSignal} [options.signal] Interrompe requisições e retorna os Peers já salvos.
@@ -112,7 +137,7 @@ async function saveIdentity(identity, timeout, signal) {
  * @param {number} [options.port=3000]
  * @param {number} [options.concurrency=500]
  * @param {number} [options.timeout=1500]
- * @param {string} [options.path="/"] Caminho usado para verificar a API.
+ * @param {string} [options.path="/identity"] Caminho usado pelo fetcher para consultar a identidade.
  * @param {(peer: object) => void | Promise<void>} [options.onFound]
  *   Chamado após salvar cada identidade. Erros de gravação interrompem a busca.
  * @returns {Promise<object[]>}

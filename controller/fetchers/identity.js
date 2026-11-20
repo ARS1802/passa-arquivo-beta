@@ -1,5 +1,5 @@
 async function requestIdentity(apiUrl, options) {
-  const response = await fetch(`${apiUrl}/`, options);
+  const response = await fetch(`${apiUrl}/identity`, options);
   const identity = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(identity?.error || `Não foi possível acessar a identidade local (${response.status}).`);

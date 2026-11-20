@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Form, InputGroup } from "react-bootstrap";
-import api from "../../../controller/fetchers/API.js";
+import fetcher from "../../../controller/fetchers/Fetcher.js";
 
 function ApiUrlConfig() {
   const discoveryController = useRef(null);
   useEffect(() => () => discoveryController.current?.abort(), []);
 
   const [peers, setPeers] = useState([]);
-  const [selectedId, setSelectedId] = useState(api.targetPeer?.id || "");
+  const [selectedId, setSelectedId] = useState(fetcher.targetPeer?.id || "");
   const [feedback, setFeedback] = useState("");
   const [feedbackVariant, setFeedbackVariant] = useState("danger");
   const [busy, setBusy] = useState(true);
@@ -20,7 +20,7 @@ function ApiUrlConfig() {
 
     async function refreshPeers() {
       try {
-        const saved = await api.getPeer();
+        const saved = await fetcher.getPeer();
         if (active) setPeers(saved);
       } catch (error) {
         if (active) {
@@ -42,7 +42,7 @@ function ApiUrlConfig() {
 
   useEffect(() => {
     let active = true;
-    api.getPeer()
+    fetcher.getPeer()
       .then((saved) => { if (active) setPeers(saved); })
       .catch((error) => { if (active) setFeedback(error.message); })
       .finally(() => { if (active) setBusy(false); });
@@ -53,7 +53,7 @@ function ApiUrlConfig() {
     setBusy(true);
     setFeedback("");
     try {
-      const peer = await api.selectPeer({ id });
+      const peer = await fetcher.selectPeer({ id });
       setSelectedId(peer.id);
     } catch (error) {
       setFeedbackVariant("danger");
@@ -67,9 +67,9 @@ function ApiUrlConfig() {
     setBusy(true);
     setFeedback("");
     try {
-      await api.deletePeer(id);
+      await fetcher.deletePeer(id);
       setPeers((saved) => saved.filter((peer) => peer.id !== id));
-      setSelectedId(api.targetPeer?.id || "");
+      setSelectedId(fetcher.targetPeer?.id || "");
       setFeedbackVariant("success");
       setFeedback("Peer excluído.");
     } catch (error) {
@@ -87,9 +87,9 @@ function ApiUrlConfig() {
     setDiscovering(true);
     setFeedback("");
     try {
-      const found = await api.discoverPeers({ signal: controller.signal });
+      const found = await fetcher.discoverPeers({ signal: controller.signal });
       setDiscovering(false);
-      setPeers(await api.getPeer());
+      setPeers(await fetcher.getPeer());
       setFeedbackVariant(controller.signal.aborted ? "info" : found.length ? "success" : "warning");
       setFeedback(controller.signal.aborted
         ? "Busca interrompida. Os Peers já salvos foram preservados."

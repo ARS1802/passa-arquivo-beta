@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Container } from "react-bootstrap";
-import api from "../../controller/fetchers/API.js";
+import fetcher from "../../controller/fetchers/Fetcher.js";
 import FileListPage from "./pages/FileListPage.jsx";
 import NamingScreen from "./pages/NamingScreen.jsx";
 
@@ -12,7 +12,7 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    api.getLocalIdentity()
+    fetcher.getLocalIdentity()
       .then((saved) => { if (active) setIdentity(saved); })
       .catch((requestError) => { if (active) setError(requestError.message); })
       .finally(() => { if (active) setLoading(false); });
@@ -34,7 +34,7 @@ function App() {
     );
   }
 
-  // Sem nome confirmado pela API, nenhuma das outras telas fica disponível.
+  // Sem nome confirmado pelo fetcher, nenhuma das outras telas fica disponível.
   if (!identity?.nome?.trim()) {
     return <NamingScreen onSaved={setIdentity} />;
   }

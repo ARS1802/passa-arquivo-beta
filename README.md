@@ -8,10 +8,10 @@ Execute os comandos abaixo a partir da raiz do repositório:
 
 ```bash
 npm install
-npm start
+npm run start
 ```
 
-O script `npm start` executa `controller/index.js` diretamente no Node.js, sem etapa de build.
+O script `npm run start` executa `controller/index.js` diretamente no Node.js, sem etapa de build.
 O diretório compartilhado é escolhido pela interface, sem um caminho fixo no script.
 Em outro terminal, inicie a interface:
 
@@ -22,12 +22,12 @@ npm run dev
 Esse comando inicia o Vite em `view/`. Durante a inicialização, sua configuração usa
 `model/Network.js` para obter as sub-redes e inseri-las no JavaScript da interface.
 A interface consome a API por HTTP; o servidor da API continua
-responsável somente por seus endpoints.
+responsável somente por seus endpoints privados ao Vite.
 
 `npm run build` gera a interface em `view/dist/`, e `npm run preview` serve essa
 versão compilada. `npm run lint` verifica o código da interface.
 A descoberta lê as sub-redes de `import.meta.env.LOCAL_NETWORK_CIDRS`, preenchido
-pelo `define` do Vite. Essas informações de rede não exigem arquivo ou rota próprios.
+pelo `define` do Vite em `view/vite.config.js`. Essas informações de rede não exigem arquivo ou rota próprios.
 
 ## Diretório compartilhado
 
@@ -36,7 +36,7 @@ O botão **Escolher diretório** usa
 `showDirectoryPicker()` no navegador, quando disponível. Essa API fornece um
 handle e o nome da pasta, mas não seu caminho absoluto. Por isso, informe o
 **Caminho absoluto** e clique em **Compartilhar diretório** para enviar o endereço
-à API. Também é possível informar diretamente o caminho, inclusive para pastas vazias.
+à API ao gravar o caminho na variavél de ambiente `SHARED_DIR`. Também é possível informar diretamente o caminho, inclusive para pastas vazias.
 O picker não envia arquivos nem inicia processos no servidor.
 
 `model/Directory.js` concentra a consulta, validação e atualização de `SHARED_DIR`
@@ -60,7 +60,7 @@ pasta configurada, retornam `409`, sem criar ou compartilhar uma pasta padrão.
 Também é possível fornecer `SHARED_DIR` no ambiente ao iniciar a API; esse caminho
 passa pela mesma validação.
 
-Após a confirmação, a classe `API` salva `SHARED_DIR` na mesma `LOCAL_STORAGE_KEY`
+Após a confirmação, a classe `Fetcher` salva `SHARED_DIR` na mesma `LOCAL_STORAGE_KEY`
 dos peers. Ao abrir a tela, consulta a API: se ela reiniciou sem diretório, reenvia
 a escolha salva para validação. Se a pasta foi removida, a tela pede uma nova escolha
 por meio da mensagem de erro. O valor do ambiente pertence ao processo da API;
@@ -100,7 +100,7 @@ classe. Os módulos de `controller/fetchers/` fazem as requisições e tratam su
 `model/Peer.js` exporta a classe `Peer`, exclusiva do Node.js. Ela é um Singleton:
 todas as chamadas a `new Peer()` no mesmo processo retornam a mesma instância,
 que representa a máquina atual. A API pode iniciar sem nome: a interface consulta
-`GET /` usando `import.meta.env.LOCAL_API_URL` e abre `NamingScreen.jsx` quando o
+`GET /identity` usando `import.meta.env.LOCAL_API_URL` e abre `NamingScreen.jsx` quando o
 nome estiver ausente ou nulo. É obrigatório salvar um nome para acessar as demais
 telas. O nome deve ter de 1 a 15 caracteres, sem espaços ou outros caracteres de
 espaçamento. Quando já existe, o fluxo segue para o diretório compartilhado; o
@@ -115,7 +115,11 @@ console.log(peer.nome, peer.ip, peer.id);
 console.log(new Peer() === peer); // true
 
 // A identidade abaixo deve vir do outro dispositivo, incluindo o UUID dele.
-peer.appendPeer({ nome: "OutroPC", ip: "192.168.1.20", id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a" });
+peer.appendPeer({
+  nome: "OutroPC",
+  ip: "192.168.1.20",
+  id: "e3743d67-6215-4b5d-a67c-31a45ee4f60a",
+});
 const peers = peer.getPeers();
 console.log(await peer.isRegistered(peers[1].id)); // true
 peer.updatePeer(peers[1].id, { nome: "Notebook", ip: "192.168.1.30" });
@@ -150,13 +154,14 @@ nem alterado por `updatePeer()`; use o setter `nome` para renomear a própria m�
 Os caminhos são relativos ao módulo,
 independentemente da pasta em que o programa é executado.
 
-A rota `GET /` retorna o conteúdo de `model/identity.json`, com nome, IP e id.
-A rota `POST /` recebe somente `{ "nome": "MeuPC" }` e retorna a identidade
+A rota `GET /identity` retorna o conteúdo de `model/identity.json`, com nome, IP e id.
+A rota `POST /identity` recebe somente `{ "nome": "MeuPC" }` e retorna a identidade
 atualizada. Usa `network.requireLocalVite`: apenas a conexão e a origem do Vite
 local são aceitas. Nomes inválidos e campos adicionais retornam `400`; acessos
 fora dessa restrição retornam `403`. A alteração preserva IP e UUID.
-O fetcher `controller/fetchers/naming.js` é usado por `api.getLocalIdentity()` e
-`api.setLocalName(nome)`, sempre na API local, independentemente do Peer selecionado.
+O fetcher `controller/fetchers/identity.js` é usado por `fetcher.getLocalIdentity()` e
+`fetcher.setLocalName(nome)`, sempre na API local, independentemente do Peer selecionado.
+As antigas rotas `GET /` e `POST /` deixam de atender a identidade.
 
 A descoberta lê esse JSON e envia a identidade para `POST /peer` na API
 local. Essa rota chama `peer.savePeer(identity)`: um id novo é cadastrado; um id
@@ -183,15 +188,15 @@ As rotas de listagem, upload e download passam pelo `router.use()` de
 `controller/routes/files.js`. Cada requisição deve enviar `X-Peer-Id` com o UUID
 do dispositivo solicitante, que precisa existir no `peers.csv` do destino.
 O método assíncrono `peer.isRegistered(id)` usa `createReadStream` e `readline` para
-consultar o CSV linha a linha, com *early exit* ao encontrar o id e fechamento da
+consultar o CSV linha a linha, com _early exit_ ao encontrar o id e fechamento da
 stream mesmo nessa saída antecipada. Id ausente, inválido ou não cadastrado
 retorna `403`; falhas de leitura do cadastro não liberam o acesso.
 
-Os métodos de arquivos da classe `API` consultam a identidade local e enviam esse
+Os métodos de arquivos da classe `Fetcher` consultam a identidade local e enviam esse
 cabeçalho automaticamente, inclusive ao acessar o próprio diretório. Para dois
 dispositivos compartilharem arquivos entre si, ambos precisam cadastrar o outro
 pela descoberta. A verificação é somente de cadastro por UUID: conhecer um UUID
-cadastrado ainda permite usá-lo no cabeçalho. `GET /` continua público, conforme
+cadastrado ainda permite usá-lo no cabeçalho. `GET /identity` continua público, conforme
 o fluxo atual; autenticação por certificados fica para uma etapa futura.
 
 Para configurar a porta, copie `.env.example` para `.env` na raiz e altere
@@ -210,7 +215,7 @@ módulos da View. A View não deve importar `Network.js`, pois ele depende de No
 A descoberta consulta os endereços em paralelo com `Promise.all()`, mantendo o
 limite de 500 requisições simultâneas e timeout de 1500 ms por requisição.
 Depois da gravação (`204`), retorna objetos com `nome`, `ip` e `id`, sem duplicar
-o mesmo dispositivo por id. Ao terminar a busca, a classe `API` consulta os
+o mesmo dispositivo por id. Ao terminar a busca, a classe `Fetcher` consulta os
 registros salvos e atualiza o cache no `localStorage`. Respostas sem identidade
 são ignoradas; falhas na gravação interrompem a busca e chegam à interface como erro.
 
@@ -224,24 +229,30 @@ ao trocar de rede, reinicie o servidor de desenvolvimento ou gere outra build.
 
 ## Seleção do Peer na interface
 
-`controller/fetchers/API.js` exporta a instância `api`, usada pela View, e a classe
-`API`. O atributo `targetPeer` começa como `null`: o usuário escolhe um dispositivo
+Os módulos de `controller/fetchers/` acompanham os arquivos de `controller/routes/`:
+`identity.js`, `peers.js`, `dir.js`, `files.js`, `list.js`, `upload.js` e `download.js`.
+`files.js` reúne os fetchers de listagem, upload e download; `peers.js` concentra
+a descoberta, o cadastro, a consulta e a exclusão de peers. `Fetcher.js` coordena
+esses módulos e mantém os métodos públicos da antiga classe `API`.
+
+`controller/fetchers/Fetcher.js` exporta a instância `fetcher`, usada pela View, e a classe
+`Fetcher`. O atributo `targetPeer` começa como `null`: o usuário escolhe um dispositivo
 salvo na tela de Peers. `targetPeerURL` é calculado como `http://<ip>:3000`, ou uma
 string vazia enquanto não há alvo. Listagem, download e upload continuam usando
 os mesmos fetchers, agora com essa URL; sem alvo, informam que é preciso selecionar
 um Peer antes de acessar arquivos.
 
 ```js
-const discovered = await api.discoverPeers(); // Descobre e salva, sem selecionar.
-const saved = await api.getPeer(); // Array de todos os Peers cadastrados na API local.
-const peer = await api.getPeer({ nome: "OutroPC" }); // Objeto ou null.
-await api.selectPeer({ id: peer.id }); // Seleciona somente esse dispositivo.
-const { files, directories } = await api.listFiles(); // Conteúdo da raiz.
-const january = await api.listFiles("Faculdade/Janeiro");
-await api.downloadFile("Faculdade/Janeiro/documento.pdf");
-await api.setPeerAtLocalStorage(peer.id);
-api.removePeerAtLocalStorage(peer.id); // Remove somente a cópia no navegador.
-await api.deletePeer(peer.id); // Exclui do cadastro local e do cache.
+const discovered = await fetcher.discoverPeers(); // Descobre e salva, sem selecionar.
+const saved = await fetcher.getPeer(); // Array de todos os Peers cadastrados na API local.
+const peer = await fetcher.getPeer({ nome: "OutroPC" }); // Objeto ou null.
+await fetcher.selectPeer({ id: peer.id }); // Seleciona somente esse dispositivo.
+const { files, directories } = await fetcher.listFiles(); // Conteúdo da raiz.
+const january = await fetcher.listFiles("Faculdade/Janeiro");
+await fetcher.downloadFile("Faculdade/Janeiro/documento.pdf");
+await fetcher.setPeerAtLocalStorage(peer.id);
+fetcher.removePeerAtLocalStorage(peer.id); // Remove somente a cópia no navegador.
+await fetcher.deletePeer(peer.id); // Exclui do cadastro local e do cache.
 ```
 
 `getPeer({})` também lista todos. Filtros aceitam `nome`, `ip` e/ou `id`; todos os
@@ -275,7 +286,7 @@ A API usa o middleware `cors` em `controller/index.js` para permitir que página
 origem leiam suas respostas. A configuração anuncia os métodos `GET`, `POST`, `DELETE` e
 `OPTIONS` e os cabeçalhos `Content-Type` e `X-Peer-Id`. O middleware responde automaticamente às
 consultas prévias do navegador (preflight) com status `204`.
-`POST /`, `GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
+`POST /identity`, `GET /peer`, `DELETE /peer/:id` e as rotas de `/dir` aplicam a restrição adicional
 descrita acima e só liberam a origem local aceita; o CORS geral não concede acesso a essas rotas.
 As requisições de arquivos também precisam passar pela consulta de cadastro por ID.
 
@@ -293,7 +304,7 @@ GET /files/list/Faculdade%2FJaneiro
 Envie `X-Peer-Id: <id-do-solicitante-cadastrado>` em cada uma dessas requisições.
 
 `path` é opcional: ausente ou vazio, representa a raiz compartilhada. O fetcher
-recebe apenas o caminho relativo (`api.listFiles("Faculdade/Janeiro")`) e cuida
+recebe apenas o caminho relativo (`fetcher.listFiles("Faculdade/Janeiro")`) e cuida
 da codificação da URL. A rota usa `Directory.resolvePath()` para obter o caminho
 completo no servidor. A resposta e o retorno do fetcher têm este formato:
 
@@ -344,7 +355,7 @@ curl -H "X-Peer-Id: <id-do-solicitante-cadastrado>" \
 
 O parâmetro de `/files/download/:path` é o caminho relativo completo, codificado
 com `encodeURIComponent`. O fetcher faz isso ao receber
-`api.downloadFile("Faculdade/Janeiro/documento.pdf")`. A rota resolve o caminho
+`fetcher.downloadFile("Faculdade/Janeiro/documento.pdf")`. A rota resolve o caminho
 com `Directory.resolvePath()` e retorna `filename` (somente o nome do arquivo),
 `mimeType`, `size` e `data` em Base64. Diretórios não podem ser baixados como arquivos.
 

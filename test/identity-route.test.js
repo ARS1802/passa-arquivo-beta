@@ -133,7 +133,7 @@ test("identidade salva sem nome mantém seu UUID; identidade inválida não é s
   }
 });
 
-test("GET / lê a identidade; POST / exige Vite local e altera apenas nome", async (t) => {
+test("GET /identity lê a identidade; POST /identity exige Vite local e altera apenas nome", async (t) => {
   const { Peer, file } = await isolatedPeer(t);
   const peer = new Peer();
   let address = "127.0.0.1";
@@ -144,12 +144,12 @@ test("GET / lê a identidade; POST / exige Vite local e altera apenas nome", asy
     Object.defineProperty(request.socket, "remoteAddress", { value: address, configurable: true });
     next();
   });
-  app.use("/", identityRoute(peer));
+  app.use("/identity", identityRoute(peer));
   app.use((error, _request, response, _next) => response.status(500).json({ error: error.message }));
   const server = app.listen(0, "127.0.0.1");
   t.after(() => new Promise((resolve) => server.close(resolve)));
   await once(server, "listening");
-  const url = `http://127.0.0.1:${server.address().port}/`;
+  const url = `http://127.0.0.1:${server.address().port}/identity`;
   const origin = `http://localhost:${network.vitePort}`;
   const post = (body, requestOrigin = origin) => fetch(url, {
     method: "POST",
@@ -163,6 +163,15 @@ test("GET / lê a identidade; POST / exige Vite local e altera apenas nome", asy
   assert.deepEqual(await response.json(), { ip: initial.ip, id: initial.id });
 
   const before = await readFile(file, "utf8");
+  for (const method of ["GET", "POST"]) {
+    const oldRoute = await fetch(new URL("/", url), {
+      method,
+      headers: { Origin: origin },
+    });
+    assert.equal(oldRoute.status, 404);
+  }
+  assert.equal(await readFile(file, "utf8"), before);
+
   for (const [remoteAddress, requestOrigin] of [
     ["127.0.0.1", null],
     ["127.0.0.1", "null"],

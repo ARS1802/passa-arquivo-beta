@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Card, Container } from "react-bootstrap";
-import api from "../../../controller/fetchers/API.js";
+import fetcher from "../../../controller/fetchers/Fetcher.js";
 import DataView from "../components/DataView.jsx";
 import FileUploadButton from "../components/FileUploadButton.jsx";
 import ApiUrlPage from "./ApiUrlPage.jsx";
@@ -22,7 +22,7 @@ function FileListPage({ localName, onNamed }) {
     setError("");
 
     try {
-      const result = await api.listFiles(nextPath);
+      const result = await fetcher.listFiles(nextPath);
       setFiles(result.files);
       setDirectories(result.directories);
       setDirectoryPath(nextPath);
@@ -35,7 +35,7 @@ function FileListPage({ localName, onNamed }) {
 
   async function handleDownload(filename) {
     try {
-      await api.downloadFile(directoryPath ? `${directoryPath}/${filename}` : filename);
+      await fetcher.downloadFile(directoryPath ? `${directoryPath}/${filename}` : filename);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -62,7 +62,7 @@ function FileListPage({ localName, onNamed }) {
       <Card>
         <Card.Header as="h4">Arquivos compartilhados</Card.Header>
         <Card.Header>
-          {api.targetPeer ? `${api.targetPeer.nome} — ${api.targetPeerURL}` : "Selecione um Peer para acessar os arquivos."}
+          {fetcher.targetPeer ? `${fetcher.targetPeer.nome} — ${fetcher.targetPeerURL}` : "Selecione um Peer para acessar os arquivos."}
         </Card.Header>
         <Card.Body>
           <p>Este computador: <strong>{localName}</strong></p>
@@ -109,7 +109,7 @@ function FileListPage({ localName, onNamed }) {
           <Button
             type="button"
             onClick={() => handleFetchFiles()}
-            disabled={loading || !api.targetPeer}
+            disabled={loading || !fetcher.targetPeer}
             className="mb-3"
           >
             {loading ? "Carregando..." : "Buscar arquivos"}
@@ -120,7 +120,7 @@ function FileListPage({ localName, onNamed }) {
             type="button"
             variant="outline-secondary"
             onClick={() => handleFetchFiles("")}
-            disabled={loading || !api.targetPeer || !directoryPath}
+            disabled={loading || !fetcher.targetPeer || !directoryPath}
             className="mb-3 me-2"
           >
             Raiz
@@ -129,7 +129,7 @@ function FileListPage({ localName, onNamed }) {
             type="button"
             variant="outline-secondary"
             onClick={() => handleFetchFiles(directoryPath.split("/").slice(0, -1).join("/"))}
-            disabled={loading || !api.targetPeer || !directoryPath}
+            disabled={loading || !fetcher.targetPeer || !directoryPath}
             className="mb-3"
           >
             Voltar

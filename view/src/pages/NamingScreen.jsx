@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Button, Card, Container, Form } from "react-bootstrap";
-import api from "../../../controller/fetchers/API.js";
+import fetcher from "../../../controller/fetchers/Fetcher.js";
 
 function NamingScreen({ initialName = "", onSaved, onBack }) {
   const [nome, setNome] = useState(initialName);
@@ -14,7 +14,7 @@ function NamingScreen({ initialName = "", onSaved, onBack }) {
     setBusy(true);
     setError("");
     try {
-      const identity = await api.setLocalName(nome);
+      const identity = await fetcher.setLocalName(nome);
       onSaved(identity);
     } catch (requestError) {
       setError(requestError.message);

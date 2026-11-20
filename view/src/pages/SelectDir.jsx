@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Container, Form } from "react-bootstrap";
-import api from "../../../controller/fetchers/API.js";
+import fetcher from "../../../controller/fetchers/Fetcher.js";
 
 function SelectDir({ onBack }) {
   const [directory, setDirectory] = useState(null);
@@ -11,7 +11,7 @@ function SelectDir({ onBack }) {
 
   useEffect(() => {
     let active = true;
-    api.getSharedDir()
+    fetcher.getSharedDir()
       .then((saved) => { if (active) setDirectory(saved); })
       .catch((requestError) => { if (active) setError(requestError.message); })
       .finally(() => { if (active) setBusy(false); });
@@ -39,7 +39,7 @@ function SelectDir({ onBack }) {
     setBusy(true);
     setError("");
     try {
-      setDirectory(await api.setSharedDir(path));
+      setDirectory(await fetcher.setSharedDir(path));
     } catch (requestError) {
       setError(requestError.message);
     } finally {

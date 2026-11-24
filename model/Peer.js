@@ -1,12 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { createPublicKey, randomUUID } from "node:crypto";
 import { createReadStream, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isIPv4 } from "node:net";
 import { createInterface } from "node:readline";
 import network from "./Network.js";
+import Security from "./Security.js";
 
 const IDENTITY_FILE = new URL("./identity.json", import.meta.url);
 const PEERS_FILE = new URL("../controller/peers.csv", import.meta.url);
-const COLUMNS = ["nome", "ip", "id"];
+const COLUMNS = ["nome", "ip", "id", "publicKey"];
 const HEADER = COLUMNS.join(",");
 
 function validateNome(nome) {
@@ -30,14 +31,29 @@ function validateIp(ip) {
   }
 }
 
+function validatePublicKey(publicKey) {
+  try {
+    if (typeof publicKey !== "string" || !publicKey.startsWith("-----BEGIN PUBLIC KEY-----")) {
+      throw new Error("Formato inválido.");
+    }
+    const key = createPublicKey(publicKey);
+    if (key.asymmetricKeyType !== "rsa" || key.asymmetricKeyDetails.modulusLength < 3072) {
+      throw new Error("Chave incompatível.");
+    }
+  } catch {
+    throw new TypeError("Informe publicKey em PEM com uma chave pública RSA de pelo menos 3072 bits.");
+  }
+}
+
 function validatePeer(peer, allowEmptyName = false) {
   if (!peer || typeof peer !== "object" || Array.isArray(peer)) {
-    throw new TypeError("Informe uma identidade com nome, ip e id.");
+    throw new TypeError("Informe uma identidade com nome, ip, id e publicKey.");
   }
   // O registro local pode ser salvo antes de o usuário escolher um nome.
   if (!allowEmptyName || peer.nome !== "") validateNome(peer.nome);
   validateId(peer.id);
   validateIp(peer.ip);
+  validatePublicKey(peer.publicKey);
 }
 
 function readFile(file, fallback) {
@@ -70,9 +86,12 @@ function parseRow(line) {
     );
   } while (match[2] === ",");
   if (values.length !== COLUMNS.length) {
-    throw new Error("Cada registro deve conter nome, ip e id.");
+    throw new Error("Cada registro deve conter nome, ip, id e publicKey.");
   }
-  return Object.fromEntries(COLUMNS.map((column, index) => [column, values[index]]));
+  const peer = Object.fromEntries(COLUMNS.map((column, index) => [column, values[index]]));
+  // A célula contém uma string JSON para manter as quebras de linha do PEM escapadas.
+  peer.publicKey = JSON.parse(peer.publicKey);
+  return peer;
 }
 
 export default class Peer {
@@ -80,6 +99,7 @@ export default class Peer {
   #nome;
   #ip;
   #id;
+  #publicKey;
 
   constructor(nome) {
     if (Peer.#instance) return Peer.#instance;
@@ -95,7 +115,12 @@ export default class Peer {
       throw new Error("identity.json deve conter ip e id.");
     }
     network.obtainCidrs();
-    const current = { nome: identity.nome, id: identity.id, ip: network.getIps()[0] };
+    // generateKeys também carrega e valida um par existente, sem substituí-lo.
+    Security.generateKeys();
+    const current = {
+      nome: identity.nome, id: identity.id, ip: network.getIps()[0],
+      publicKey: Security.publicKey,
+    };
     // O nome pode ficar pendente até o usuário concluir a NamingScreen.
     if (current.nome != null) validateNome(current.nome);
     validateId(current.id);
@@ -103,6 +128,7 @@ export default class Peer {
     this.#nome = current.nome;
     this.#ip = current.ip;
     this.#id = current.id;
+    this.#publicKey = current.publicKey;
     this.#saveIdentity(current);
     Object.freeze(this);
     Peer.#instance = this;
@@ -118,7 +144,7 @@ export default class Peer {
     // O primeiro registro divergente é preservado no fim do cadastro.
     if (first && first.id !== identity.id) peers.push(first);
     const others = peers.filter((peer) => peer.id !== identity.id);
-    const local = { nome: identity.nome ?? "", ip: identity.ip, id: identity.id };
+    const local = { nome: identity.nome ?? "", ip: identity.ip, id: identity.id, publicKey: identity.publicKey };
     writeFile(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`);
     this.#writePeers([local, ...others]);
   }
@@ -146,8 +172,12 @@ export default class Peer {
     return this.#id;
   }
 
+  get publicKey() {
+    return this.#publicKey;
+  }
+
   toJSON() {
-    return { nome: this.nome, ip: this.ip, id: this.id };
+    return { nome: this.nome, ip: this.ip, id: this.id, publicKey: this.publicKey };
   }
 
   /** Retorna registros simples; somente esta máquina é uma instância de Peer. */
@@ -202,7 +232,11 @@ export default class Peer {
 
   #writePeers(peers) {
     const rows = peers.map((peer) => COLUMNS.map(
-      (column) => `"${peer[column].replaceAll('"', '""')}"`,
+      (column) => {
+        // JSON escapa as quebras do PEM; as aspas são escapadas conforme o CSV.
+        const value = column === "publicKey" ? JSON.stringify(peer[column]) : peer[column];
+        return `"${value.replaceAll('"', '""')}"`;
+      },
     ).join(","));
     writeFile(PEERS_FILE, [HEADER, ...rows, ""].join("\n"));
   }
@@ -214,7 +248,7 @@ export default class Peer {
     if (peers.some((item) => item.id === peer.id)) {
       throw new Error("Já existe um peer com esse id.");
     }
-    peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id });
+    peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id, publicKey: peer.publicKey });
     this.#writePeers(peers);
   }
 
@@ -226,10 +260,13 @@ export default class Peer {
     const peers = this.getPeers();
     const existing = peers.find((item) => item.id === peer.id);
     if (existing) {
+      if (existing.publicKey !== peer.publicKey) {
+        throw new TypeError("A chave pública recebida difere da cadastrada para este peer.");
+      }
       if (existing.ip === peer.ip) return;
       existing.ip = peer.ip;
     } else {
-      peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id });
+      peers.push({ nome: peer.nome, ip: peer.ip, id: peer.id, publicKey: peer.publicKey });
     }
     this.#writePeers(peers);
   }

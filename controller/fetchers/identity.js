@@ -6,6 +6,7 @@ async function requestIdentity(apiUrl, options) {
   }
   if (!identity || typeof identity.ip !== "string" || !identity.ip ||
       typeof identity.id !== "string" || !identity.id ||
+      typeof identity.publicKey !== "string" || !identity.publicKey.trim() ||
       (identity.nome != null && typeof identity.nome !== "string")) {
     throw new Error("A resposta da API não contém uma identidade válida.");
   }

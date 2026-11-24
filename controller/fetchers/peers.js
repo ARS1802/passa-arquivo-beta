@@ -19,7 +19,8 @@ export function isValidIpv4(ip) {
 export function isPeer(peer) {
   return peer && typeof peer === "object" && !Array.isArray(peer) &&
     typeof peer.nome === "string" && peer.nome.trim() &&
-    typeof peer.id === "string" && peer.id.trim() && isValidIpv4(peer.ip);
+    typeof peer.id === "string" && peer.id.trim() && isValidIpv4(peer.ip) &&
+    typeof peer.publicKey === "string" && peer.publicKey.trim().length > 0;
 }
 
 export async function getPeers(apiUrl) {
@@ -96,14 +97,7 @@ async function getIdentity(apiUrl, timeout, path, signal) {
       return null;
     }
     const identity = await response.json();
-    if (
-      !identity ||
-      typeof identity.nome !== "string" ||
-      typeof identity.id !== "string" ||
-      !isValidIpv4(identity.ip)
-    ) {
-      return null;
-    }
+    if (!isPeer(identity)) return null;
     return identity;
   } catch {
     return null;

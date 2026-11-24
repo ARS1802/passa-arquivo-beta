@@ -25,19 +25,19 @@ function readKey(file) {
 }
 
 export default class Security {
-  #publicKey;
-  #privateKey;
+  static #publicKey;
+  static #privateKey;
 
-  get publicKey() {
+  static get publicKey() {
     return this.#publicKey;
   }
 
-  get privateKey() {
+  static get privateKey() {
     return this.#privateKey;
   }
 
   /** Carrega o par existente ou gera um novo quando ambos os arquivos faltam. */
-  generateKeys() {
+  static generateKeys() {
     let publicKey = readKey(PUBLIC_KEY_FILE);
     let privateKey = readKey(PRIVATE_KEY_FILE);
 
@@ -85,7 +85,7 @@ export default class Security {
   }
 
   /** Criptografa uma string para o dono da chave pública RSA informada. */
-  crypt(publicKey, info) {
+  static crypt(publicKey, info) {
     if (typeof info !== "string")
       throw new TypeError("A informação deve ser uma string.");
     const recipientKey = createPublicKey(publicKey);
@@ -123,7 +123,7 @@ export default class Security {
   }
 
   /** Usa a chave privada informada; nunca retorna conteúdo com autenticação inválida. */
-  decrypt(privateKey, info) {
+  static decrypt(privateKey, info) {
     if (typeof info !== "string")
       throw new TypeError("A informação deve ser uma string.");
     try {

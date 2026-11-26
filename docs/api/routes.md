@@ -21,11 +21,11 @@ Fetcher: [`fetchers/identity.js`](../../controller/fetchers/identity.js).
 
 Ao abrir a aplicação, `App.jsx` chama `fetcher.getLocalIdentity()` →
 `getLocalIdentity(apiUrl)`. A rota serializa o peer com `Peer.toJSON()` e retorna
-`200` com `{ nome, ip, id }`. Sem nome definido, `nome` pode estar ausente ou nulo
+`200` com `{ nome, ip, id, publicKey }`. Sem nome definido, `nome` pode estar ausente ou nulo
 e a interface abre a tela de nomeação.
 
-A descoberta também consulta essa rota nos IPv4 candidatos, por `getIdentity()`
-interno de [`fetchers/peers.js`](../../controller/fetchers/peers.js). **Acesso público.**
+**Acesso: Vite local.** A descoberta remota usa `GET /`, que retorna `200`
+sem identidade, e então inicia a troca de chaves abaixo.
 
 ### `POST /identity`
 
@@ -38,6 +38,33 @@ Retorna `200` com a identidade atualizada. Aceita somente `nome`, de 1 a 15
 caracteres sem espaços; dados inválidos ou campos extras recebem `400`.
 **Acesso: Vite local.**
 
+### `POST /identity/key`
+
+Implementação: [`routes/key.js`](../../controller/routes/key.js).
+Fetcher: [`fetchers/key.js`](../../controller/fetchers/key.js), também disponível
+por `fetcher.exchangeKeys(apiUrl, { signal })`.
+
+Recebe `{ nome, ip, pubKey }` do requisitor e retorna `200` com
+`{ nome, ip, pubKey, id }` do recebedor. Somente `id` é criptografado com a chave
+pública enviada, usando `Security.crypt()`. `pubKey` é o nome no protocolo;
+no Model e no cadastro, o campo continua sendo `publicKey`.
+
+Dados ou chave pública inválidos recebem `400`; um recebedor ainda sem nome
+retorna `409`. A rota não cadastra o requisitor, pois ainda não recebeu seu ID.
+**Acesso público.** Esta troca ainda não constitui pareamento autenticado.
+
+### `POST /identity/key/decrypt`
+
+Recebe a resposta criptografada da troca. O backend local usa
+`Security.decrypt(Security.privateKey, id)`, valida a identidade completa e
+retorna `200` com `{ nome, ip, publicKey, id }`, agora com UUID em texto.
+Conteúdo inválido ou impossível de descriptografar recebe `400`.
+**Acesso: Vite local.** A chave privada nunca é enviada ao navegador.
+
+O fetcher só envia a identidade a `POST /peer` depois dessa etapa. Cada worker
+executa a sequência assim que seu `GET /` retorna `200`, sem esperar o
+`Promise.all()` da varredura inteira. Timeout e cancelamento abrangem a troca.
+
 ## Peers — `controller/routes/peers.js`
 
 Implementação: [`routes/peers.js`](../../controller/routes/peers.js).
@@ -47,7 +74,7 @@ Fetcher: [`fetchers/peers.js`](../../controller/fetchers/peers.js).
 
 Ao abrir **Selecionar Peer**, `fetcher.getPeer()` → `getPeers(apiUrl)` consulta
 o cadastro local. A rota chama `peer.getPeers()` e retorna `200` com
-`{ "peers": [{ "nome": "MeuPC", "ip": "192.168.1.20", "id": "<uuid>" }] }`.
+`{ "peers": [{ "nome": "MeuPC", "ip": "192.168.1.20", "id": "<uuid>", "publicKey": "<PEM>" }] }`.
 O primeiro registro representa a própria máquina.
 
 `fetcher.getPeer({ nome, ip, id })` também usa essa rota, filtrando a resposta no
@@ -58,9 +85,10 @@ navegador pelos campos fornecidos; filtros ambíguos exigem maior precisão.
 
 Ao encontrar um dispositivo durante **Procurar Peers na rede**,
 `fetcher.discoverPeers()` → `discoverPeers()` → `saveIdentity()` envia
-`{ nome, ip, id }` à API local. A rota chama `peer.savePeer()` e retorna `204`.
+`{ nome, ip, id, publicKey }` à API local após descriptografar o ID. A rota chama `peer.savePeer()` e retorna `204`.
 UUID novo é cadastrado; UUID conhecido atualiza somente o IP. O próprio peer
-local é preservado. Identidades inválidas recebem `400`. **Acesso público.**
+local é preservado. Identidades inválidas e troca de chave de um ID conhecido
+recebem `400`. **Acesso: Vite local.**
 
 ### `DELETE /peer/:id`
 

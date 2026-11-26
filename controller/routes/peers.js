@@ -26,7 +26,7 @@ export default function peersRoute(peer) {
     }
   });
 
-  router.post("/", (request, response, next) => {
+  router.post("/", network.requireLocalVite, (request, response, next) => {
     try {
       peer.savePeer(request.body);
       return response.sendStatus(204);

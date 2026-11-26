@@ -16,8 +16,8 @@ O middleware exige simultaneamente:
 - `Origin` HTTP com `localhost`, loopback ou IPv4 local e a porta `VITE_PORT` (padrão `5173`).
 
 Requisições remotas, sem `Origin` ou com origem incompatível recebem `403`.
-Essa regra cobre `POST /identity`, `GET /peer`, `DELETE /peer/:id`, `GET /dir`
-e `POST /dir`. O Vite usa `strictPort`; o preview deve usar a mesma porta configurada.
+Essa regra cobre `GET /identity`, `POST /identity`, `POST /identity/key/decrypt`,
+`GET /peer`, `POST /peer`, `DELETE /peer/:id`, `GET /dir` e `POST /dir`. O Vite usa `strictPort`; o preview deve usar a mesma porta configurada.
 Um processo local pode imitar `Origin`, portanto essa verificação não autentica processos.
 
 ## Arquivos com `X-Peer-Id`
@@ -34,8 +34,15 @@ cadastro contém o peer local.
 
 ## Limites atuais
 
-`GET /identity`, `POST /peer` e `GET /api` são públicos. A descoberta usa os dois
-primeiros para consultar e cadastrar identidades sem confirmação de pareamento.
+`GET /`, `POST /identity/key` e `GET /api` são públicos. A descoberta troca
+chaves públicas e recebe o ID criptografado para o requisitor, usando RSA-OAEP
+com SHA-256 e AES-256-GCM. A descriptografia ocorre somente no backend local;
+a chave privada permanece em `controller/.keys/`.
+
+Isso protege o ID nessa resposta, mas não autentica o requisitor: qualquer
+dispositivo pode enviar sua própria chave pública e recuperar o ID retornado.
+Não há confirmação de pareamento, prova de identidade do recebedor nem proteção
+contra repetição. Uma chave já cadastrada para um UUID não é substituída na descoberta.
 Conhecer um UUID cadastrado permite enviá-lo em `X-Peer-Id`; o cabeçalho não prova
 a identidade de quem faz a requisição. A comunicação atual usa HTTP.
 

@@ -1,6 +1,12 @@
 import { downloadFile, listFiles, uploadFile } from "./files.js";
-import { discoverPeers as scanNetwork, isPeer, getPeers, deletePeer } from "./peers.js";
+import {
+  discoverPeers as scanNetwork,
+  isPeer,
+  getPeers,
+  deletePeer,
+} from "./peers.js";
 import { getSharedDir, setSharedDir } from "./dir.js";
+import { exchangeKeys } from "./key.js";
 import { getLocalIdentity, setLocalName } from "./identity.js";
 
 // O cadastro pertence à máquina local, mesmo quando outro Peer está selecionado.
@@ -19,7 +25,8 @@ export class Fetcher {
   }
 
   #getTargetPeerURL() {
-    if (!this.targetPeer) throw new Error("Selecione um Peer antes de acessar arquivos.");
+    if (!this.targetPeer)
+      throw new Error("Selecione um Peer antes de acessar arquivos.");
     return this.targetPeerURL;
   }
 
@@ -27,13 +34,18 @@ export class Fetcher {
     const empty = { peers: [], SHARED_DIR: null };
     if (typeof localStorage === "undefined") return empty;
     try {
-      const stored = JSON.parse(localStorage.getItem(this.LOCAL_STORAGE_KEY) || "null");
+      const stored = JSON.parse(
+        localStorage.getItem(this.LOCAL_STORAGE_KEY) || "null",
+      );
       // Preserva os peers de instalações que ainda guardam somente um array.
-      if (Array.isArray(stored)) return { ...empty, peers: stored.filter(isPeer) };
+      if (Array.isArray(stored))
+        return { ...empty, peers: stored.filter(isPeer) };
       return {
         peers: Array.isArray(stored?.peers) ? stored.peers.filter(isPeer) : [],
-        SHARED_DIR: typeof stored?.SHARED_DIR === "string" && stored.SHARED_DIR.trim()
-          ? stored.SHARED_DIR : null,
+        SHARED_DIR:
+          typeof stored?.SHARED_DIR === "string" && stored.SHARED_DIR.trim()
+            ? stored.SHARED_DIR
+            : null,
       };
     } catch {
       // Um cache inválido não deve impedir a consulta ao cadastro da API local.
@@ -43,13 +55,18 @@ export class Fetcher {
 
   #store(changes) {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify({ ...this.#readStorage(), ...changes }));
+      localStorage.setItem(
+        this.LOCAL_STORAGE_KEY,
+        JSON.stringify({ ...this.#readStorage(), ...changes }),
+      );
     }
   }
 
   #cachePeers(peers) {
     // O id permanece o mesmo quando o dispositivo troca de endereço IPv4.
-    const stored = new Map(this.#readStorage().peers.map((peer) => [peer.id, peer]));
+    const stored = new Map(
+      this.#readStorage().peers.map((peer) => [peer.id, peer]),
+    );
     for (const peer of peers) stored.set(peer.id, peer);
     this.#store({ peers: [...stored.values()] });
   }
@@ -60,6 +77,19 @@ export class Fetcher {
 
   getLocalIdentity() {
     return getLocalIdentity(LOCAL_API_URL);
+  }
+
+  async exchangeKeys(apiUrl, { signal } = {}) {
+    const requestSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
+      : AbortSignal.timeout(20000);
+    const identity = await getLocalIdentity(LOCAL_API_URL, {
+      signal: requestSignal,
+    });
+    return exchangeKeys(apiUrl, identity, {
+      localApiUrl: LOCAL_API_URL,
+      signal: requestSignal,
+    });
   }
 
   setLocalName(nome) {
@@ -112,10 +142,17 @@ export class Fetcher {
       throw new TypeError("Informe um objeto com nome, ip ou id.");
     }
     const entries = Object.entries(criteria);
-    if (entries.some(([key, value]) =>
-      !["nome", "ip", "id"].includes(key) || typeof value !== "string" || !value.trim()
-    )) {
-      throw new TypeError("Use nome, ip ou id com valores de texto não vazios.");
+    if (
+      entries.some(
+        ([key, value]) =>
+          !["nome", "ip", "id"].includes(key) ||
+          typeof value !== "string" ||
+          !value.trim(),
+      )
+    ) {
+      throw new TypeError(
+        "Use nome, ip ou id com valores de texto não vazios.",
+      );
     }
 
     const peers = await getPeers(LOCAL_API_URL);
@@ -124,7 +161,8 @@ export class Fetcher {
     const matches = peers.filter((peer) =>
       entries.every(([key, value]) => peer[key] === value),
     );
-    if (matches.length > 1) throw new Error("Mais de um Peer corresponde ao filtro. Informe o id.");
+    if (matches.length > 1)
+      throw new Error("Mais de um Peer corresponde ao filtro. Informe o id.");
     return matches[0] ?? null;
   }
 
@@ -136,11 +174,14 @@ export class Fetcher {
   }
 
   removePeerAtLocalStorage(id) {
-    this.#store({ peers: this.#readStorage().peers.filter((peer) => peer.id !== id) });
+    this.#store({
+      peers: this.#readStorage().peers.filter((peer) => peer.id !== id),
+    });
   }
 
   async deletePeer(id) {
-    if (typeof id !== "string" || !id.trim()) throw new TypeError("Informe o id do Peer.");
+    if (typeof id !== "string" || !id.trim())
+      throw new TypeError("Informe o id do Peer.");
     await deletePeer(LOCAL_API_URL, id);
     if (this.targetPeer?.id === id) this.targetPeer = null;
     this.removePeerAtLocalStorage(id);
@@ -149,12 +190,16 @@ export class Fetcher {
   listFiles(directoryPath = "") {
     const url = this.#getTargetPeerURL();
     // O cabeçalho identifica quem pede o arquivo, mesmo ao acessar outro Peer.
-    return this.getLocalIdentity().then(({ id }) => listFiles(url, directoryPath, id));
+    return this.getLocalIdentity().then(({ id }) =>
+      listFiles(url, directoryPath, id),
+    );
   }
 
   downloadFile(filePath) {
     const url = this.#getTargetPeerURL();
-    return this.getLocalIdentity().then(({ id }) => downloadFile(url, filePath, id));
+    return this.getLocalIdentity().then(({ id }) =>
+      downloadFile(url, filePath, id),
+    );
   }
 
   uploadFile(file) {

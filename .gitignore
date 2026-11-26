@@ -9,3 +9,4 @@ view/dist
 /model/identity.json.tmp
 /controller/peers.csv.tmp
 /controller/.keys/
+/controller/peers.csv

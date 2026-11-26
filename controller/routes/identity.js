@@ -1,10 +1,13 @@
 import { Router } from "express";
+import keyRoute from "./key.js";
 import network from "../../model/Network.js";
 
 export default function identityRoute(peer) {
   const router = Router();
 
-  router.get("/", (_request, response) => {
+  router.use("/key", keyRoute(peer));
+
+  router.get("/", network.requireLocalVite, (_request, response) => {
     response.set("Cache-Control", "no-store");
     return response.json(peer);
   });

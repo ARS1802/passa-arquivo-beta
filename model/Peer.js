@@ -45,15 +45,19 @@ function validatePublicKey(publicKey) {
   }
 }
 
-function validatePeer(peer, allowEmptyName = false) {
+export function validatePublicIdentity(peer, allowEmptyName = false) {
   if (!peer || typeof peer !== "object" || Array.isArray(peer)) {
-    throw new TypeError("Informe uma identidade com nome, ip, id e publicKey.");
+    throw new TypeError("Informe uma identidade com nome, ip e publicKey.");
   }
   // O registro local pode ser salvo antes de o usuário escolher um nome.
   if (!allowEmptyName || peer.nome !== "") validateNome(peer.nome);
-  validateId(peer.id);
   validateIp(peer.ip);
   validatePublicKey(peer.publicKey);
+}
+
+export function validatePeer(peer, allowEmptyName = false) {
+  validatePublicIdentity(peer, allowEmptyName);
+  validateId(peer.id);
 }
 
 function readFile(file, fallback) {

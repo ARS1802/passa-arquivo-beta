@@ -1,9 +1,12 @@
 /*
  * Rotas da API:
- * GET /identity - retorna a identidade desta máquina.
+ * GET / - sinaliza disponibilidade, sem expor a identidade.
+ * GET /identity - retorna a identidade desta máquina, somente para o Vite local.
+ * POST /identity/key - troca chaves públicas e retorna o id criptografado.
+ * POST /identity/key/decrypt - descriptografa a identidade recebida, somente para o Vite local.
  * POST /identity - altera somente o nome desta máquina, somente para o Vite local.
  * GET /peer - lista peers cadastrados, somente para o Vite local.
- * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP.
+ * POST /peer - cadastra uma identidade descoberta ou atualiza seu IP, somente para o Vite local.
  * DELETE /peer/:id - exclui um peer salvo, somente para o Vite local.
  * GET /dir e POST /dir - consultam e alteram SHARED_DIR, somente para o Vite local.
  * POST /files/upload - recebe { filename, mimeType, data } em JSON, com data em Base64.
@@ -41,6 +44,10 @@ app.use(
     allowedHeaders: ["Content-Type", "X-Peer-Id"],
   }),
 );
+app.get("/", (_request, response) => {
+  response.set("Cache-Control", "no-store");
+  return response.sendStatus(200);
+});
 app.use("/identity", identityRoute(peer));
 app.use("/peer", peersRoute(peer));
 app.use("/dir", dirRoute());

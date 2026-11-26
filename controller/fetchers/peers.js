@@ -1,7 +1,9 @@
+import { getLocalIdentity, requestIdentity } from "./identity.js";
+
 const DEFAULT_PORT = 3000;
 const DEFAULT_CONCURRENCY = 800;
 const DEFAULT_TIMEOUT = 10000;
-const DEFAULT_PATH = "/identity";
+const DEFAULT_PATH = "/";
 
 export function isValidIpv4(ip) {
   if (typeof ip !== "string") return false;
@@ -84,26 +86,6 @@ function* generateIps(range) {
   }
 }
 
-async function getIdentity(apiUrl, timeout, path, signal) {
-  try {
-    const response = await fetch(`${apiUrl}${path}`, {
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
-        : AbortSignal.timeout(timeout),
-      redirect: "manual",
-    });
-    if (response.status !== 200) {
-      await response.body?.cancel();
-      return null;
-    }
-    const identity = await response.json();
-    if (!isPeer(identity)) return null;
-    return identity;
-  } catch {
-    return null;
-  }
-}
-
 async function saveIdentity(identity, timeout, signal) {
   // O fetcher entrega os dados à API local; somente Peer escreve no CSV.
   const response = await fetch(`${import.meta.env.LOCAL_API_URL}/peer`, {
@@ -123,15 +105,15 @@ async function saveIdentity(identity, timeout, signal) {
 }
 
 /**
- * Procura identidades por GET em `path` (padrão "/identity") nas sub-redes locais
+ * Procura identidades por GET em `path` (padrão "/") nas sub-redes locais
  * na ordem recebida de Network e as salva na API local.
  * Sem sub-redes, retorna uma lista vazia.
  * @param {AbortSignal} [options.signal] Interrompe requisições e retorna os Peers já salvos.
  * @param {object} [options]
  * @param {number} [options.port=3000]
- * @param {number} [options.concurrency=500]
- * @param {number} [options.timeout=1500]
- * @param {string} [options.path="/identity"] Caminho usado pelo fetcher para consultar a identidade.
+ * @param {number} [options.concurrency=800]
+ * @param {number} [options.timeout=10000]
+ * @param {string} [options.path="/"] Caminho usado pelo fetcher para consultar a identidade.
  * @param {(peer: object) => void | Promise<void>} [options.onFound]
  *   Chamado após salvar cada identidade. Erros de gravação interrompem a busca.
  * @returns {Promise<object[]>}
@@ -160,6 +142,11 @@ export async function discoverPeers(options = {}) {
   }
 
   const ranges = getLocalNetworkCidrs().map((item) => parseCidr(item.trim()));
+  if (ranges.length === 0 || signal?.aborted) return [];
+  const localApiUrl = import.meta.env.LOCAL_API_URL;
+  const localIdentity = await getLocalIdentity(localApiUrl, {
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout),
+  });
   const discoveredPeers = new Map();
   let stopped = false;
 
@@ -173,7 +160,7 @@ export async function discoverPeers(options = {}) {
         if (done) return;
 
         const apiUrl = `http://${address}:${port}`;
-        const identity = await getIdentity(apiUrl, timeout, path, signal);
+        const identity = await requestIdentity(apiUrl, localIdentity, { timeout, path, signal, localApiUrl });
         if (!identity || stopped || signal?.aborted) continue;
         if (discoveredPeers.has(identity.id)) continue; // faixas sobrepostas ou várias interfaces
 
@@ -182,8 +169,8 @@ export async function discoverPeers(options = {}) {
           await saveIdentity(identity, timeout, signal);
           await onFound?.(identity);
         } catch (error) {
+          discoveredPeers.delete(identity.id);
           if (signal?.aborted) {
-            discoveredPeers.delete(identity.id);
             return;
           }
           stopped = true; // evita que os outros workers continuem em segundo plano
